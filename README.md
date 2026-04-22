@@ -1,5 +1,7 @@
 # Training Plan Overview
 
+[https://nikimicallef.github.io/training-plan-overview/](https://nikimicallef.github.io/training-plan-overview/)
+
 ## Requirements
 
 - Node `24+`
