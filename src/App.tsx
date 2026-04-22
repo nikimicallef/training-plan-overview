@@ -39,12 +39,14 @@ type WeekEvent = {
 type FocusRow = {
   id: string;
   label: string;
+  abbreviation: string;
   isCustom: boolean;
 };
 
 type PhaseBlock = {
   id: string;
   label: string;
+  abbreviation: string;
   startWeekIndex: number;
   endWeekIndex: number;
 };
@@ -131,13 +133,14 @@ const DEFAULT_WEEK_COUNT = 6;
 const LEFT_AXIS_TICKS = 5;
 const RIGHT_AXIS_TICKS = 5;
 const DEFAULT_FOCUS_ROWS: FocusRow[] = [
-  { id: 'recovery', label: 'Recovery', isCustom: false },
-  { id: 'z1-focus', label: 'Z1', isCustom: false },
-  { id: 'z2-focus', label: 'Z2', isCustom: false },
-  { id: 'z3-focus', label: 'Z3', isCustom: false },
-  { id: 'taper', label: 'Taper', isCustom: false },
-  { id: 'testing', label: 'Testing', isCustom: false },
-  { id: 'mental-training', label: 'Mental Training', isCustom: false },
+  { id: 'recovery', label: 'Recovery', abbreviation: 'R', isCustom: false },
+  { id: 'z1-focus', label: 'Z1', abbreviation: 'Z1', isCustom: false },
+  { id: 'z2-focus', label: 'Z2', abbreviation: 'Z2', isCustom: false },
+  { id: 'z3-focus', label: 'Z3', abbreviation: 'Z3', isCustom: false },
+  { id: 'cross-training', label: 'Cross Training', abbreviation: 'XT', isCustom: false },
+  { id: 'strength', label: 'Strength', abbreviation: 'ST', isCustom: false },
+  { id: 'taper', label: 'Taper', abbreviation: 'TA', isCustom: false },
+  { id: 'testing', label: 'Testing', abbreviation: 'TA', isCustom: false },
 ];
 
 const COLORS = {
@@ -168,6 +171,15 @@ function getEventGradeBandColor(grade: EventGrade): string | null {
   }
 
   return null;
+}
+
+function sanitizeAbbreviation(value: unknown): string {
+  return sanitizeString(value).trim().slice(0, 2).toUpperCase();
+}
+
+function getDefaultFocusAbbreviation(id: string, label: string): string {
+  const matchedDefault = DEFAULT_FOCUS_ROWS.find((row) => row.id === id || row.label === label);
+  return matchedDefault?.abbreviation ?? '';
 }
 
 function resizeWeeks(count: number, previous: WeekFormState[]): WeekFormState[] {
@@ -368,15 +380,21 @@ function sanitizeWeekEvent(value: unknown): WeekEvent {
 }
 
 function sanitizeFocusRow(value: unknown, index: number): FocusRow {
+  const id =
+    isRecord(value) && sanitizeString(value.id)
+      ? sanitizeString(value.id)
+      : `focus-upload-${index + 1}`;
+  const label =
+    isRecord(value) && sanitizeString(value.label)
+      ? sanitizeString(value.label)
+      : `Custom ${index + 1}`;
+
   return {
-    id:
-      isRecord(value) && sanitizeString(value.id)
-        ? sanitizeString(value.id)
-        : `focus-upload-${index + 1}`,
-    label:
-      isRecord(value) && sanitizeString(value.label)
-        ? sanitizeString(value.label)
-        : `Custom ${index + 1}`,
+    id,
+    label,
+    abbreviation: isRecord(value)
+      ? sanitizeAbbreviation(value.abbreviation) || getDefaultFocusAbbreviation(id, label)
+      : '',
     isCustom: isRecord(value) ? sanitizeBoolean(value.isCustom) : true,
   };
 }
@@ -400,6 +418,7 @@ function sanitizePhaseBlock(
   return {
     id: sanitizeString(value.id) || `phase-upload-${index + 1}`,
     label: sanitizeString(value.label),
+    abbreviation: sanitizeAbbreviation(value.abbreviation),
     startWeekIndex,
     endWeekIndex,
   };
@@ -500,7 +519,7 @@ function sanitizePlannerSnapshot(value: unknown): PlannerSnapshot | null {
     activeTab:
       activeTab === 'volume' || activeTab === 'week' || activeTab === 'calendar'
         ? activeTab
-        : 'volume',
+        : 'week',
     weeksInput: normalizedWeeksInput,
     weeks: resizeWeeks(weekCount, uploadedWeeks),
     weekDesign: sanitizeWeekDesignState(value.weekDesign, weekCount),
@@ -775,33 +794,39 @@ function buildMonthSegments(columns: WeekColumn[]): Array<{ label: string; span:
 function buildPhaseSegments(
   weekCount: number,
   phaseBlocks: PhaseBlock[],
-): Array<{ label: string; span: number; isEmpty: boolean }> {
+): Array<{ label: string; abbreviation: string; span: number; isEmpty: boolean }> {
   if (weekCount === 0) {
     return [];
   }
 
-  const assignedLabels = Array.from({ length: weekCount }, () => '');
+  const assignedPhases = Array.from({ length: weekCount }, () => ({ label: '', abbreviation: '' }));
 
   phaseBlocks.forEach((block) => {
     const label = block.label.trim();
+    const abbreviation = block.abbreviation.trim();
 
     for (let weekIndex = block.startWeekIndex; weekIndex <= block.endWeekIndex; weekIndex += 1) {
-      assignedLabels[weekIndex] = label;
+      assignedPhases[weekIndex] = { label, abbreviation };
     }
   });
 
-  const segments: Array<{ label: string; span: number; isEmpty: boolean }> = [];
+  const segments: Array<{ label: string; abbreviation: string; span: number; isEmpty: boolean }> = [];
 
-  assignedLabels.forEach((label) => {
+  assignedPhases.forEach(({ label, abbreviation }) => {
     const previousSegment = segments.at(-1);
 
-    if (previousSegment && previousSegment.label === label) {
+    if (
+      previousSegment &&
+      previousSegment.label === label &&
+      previousSegment.abbreviation === abbreviation
+    ) {
       previousSegment.span += 1;
       return;
     }
 
     segments.push({
       label,
+      abbreviation,
       span: 1,
       isEmpty: label === '',
     });
@@ -942,9 +967,13 @@ function getRoundedRectPath(
 function Chart({
   data,
   eventGrades,
+  weekLabels,
+  focusAbbreviations,
 }: {
   data: ParsedWeek[];
   eventGrades: EventGrade[];
+  weekLabels: string[];
+  focusAbbreviations: string[][];
 }) {
   if (data.length === 0) {
     return (
@@ -956,7 +985,8 @@ function Chart({
 
   const width = 1000;
   const height = 760;
-  const margin = { top: 80, right: 82, bottom: 78, left: 76 };
+  const maxAbbreviationLines = Math.max(...focusAbbreviations.map((week) => week.length), 0);
+  const margin = { top: 80, right: 82, bottom: 78 + maxAbbreviationLines * 14, left: 76 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
   const slotWidth = plotWidth / Math.max(data.length, 1);
@@ -1110,9 +1140,19 @@ function Chart({
               />
               {index % labelStep === 0 || index === data.length - 1 ? (
                 <text className="week-label" x={x} y={height - margin.bottom + 26}>
-                  {index + 1}
+                  {weekLabels[index] ?? ''}
                 </text>
               ) : null}
+              {(focusAbbreviations[index] ?? []).map((abbreviation, abbreviationIndex) => (
+                <text
+                  className="chart-focus-label"
+                  key={`${week.week}-focus-${abbreviation}-${abbreviationIndex + 1}`}
+                  x={x}
+                  y={height - margin.bottom + 42 + abbreviationIndex * 13}
+                >
+                  {abbreviation}
+                </text>
+              ))}
             </g>
           );
         })}
@@ -1216,7 +1256,7 @@ export default function App() {
   const [scheduledWorkouts, setScheduledWorkouts] = useState<Record<string, DayWorkout>>({});
   const [splitPercent, setSplitPercent] = useState(50);
   const [isDraggingDivider, setIsDraggingDivider] = useState(false);
-  const [activeTab, setActiveTab] = useState<PlannerTab>('volume');
+  const [activeTab, setActiveTab] = useState<PlannerTab>('week');
   const [activeCalendarDate, setActiveCalendarDate] = useState<Date | null>(null);
   const [calendarDraft, setCalendarDraft] = useState<DayWorkout>({ ...EMPTY_DAY_WORKOUT });
   const [calendarDraftErrors, setCalendarDraftErrors] = useState<string[]>([]);
@@ -1237,6 +1277,13 @@ export default function App() {
   const weekColumns = getWeekColumns(parsedWeekCount, weekDesign.raceDate);
   const monthSegments = buildMonthSegments(weekColumns);
   const phaseSegments = buildPhaseSegments(parsedWeekCount, weekDesign.phaseBlocks);
+  const chartWeekLabels = weekColumns.map((column) => String(column.weeksToRace));
+  const chartFocusAbbreviations = Array.from({ length: parsedWeekCount }, (_, weekIndex) =>
+    weekDesign.focusRows
+      .filter((row) => weekDesign.focusSelections[row.id][weekIndex] ?? false)
+      .map((row) => row.abbreviation.trim())
+      .filter(Boolean),
+  );
   const invalidWeekCount = weeksInput.trim() !== '' && parsedWeekCount === 0 && weeksInput.trim() !== '0';
   const totalVolumeMinutes = parsedWeeks.reduce((sum, week) => sum + week.totalMinutes, 0);
   const totalZ3Minutes = parsedWeeks.reduce((sum, week) => sum + week.z3Minutes, 0);
@@ -1282,6 +1329,7 @@ export default function App() {
       const row: FocusRow = {
         id: rowId,
         label: `Custom ${previous.focusRows.filter((focusRow) => focusRow.isCustom).length + 1}`,
+        abbreviation: '',
         isCustom: true,
       };
 
@@ -1301,6 +1349,15 @@ export default function App() {
       ...previous,
       focusRows: previous.focusRows.map((row) =>
         row.id === rowId ? { ...row, label } : row,
+      ),
+    }));
+  }
+
+  function updateFocusRowAbbreviation(rowId: string, abbreviation: string) {
+    setWeekDesign((previous) => ({
+      ...previous,
+      focusRows: previous.focusRows.map((row) =>
+        row.id === rowId ? { ...row, abbreviation: sanitizeAbbreviation(abbreviation) } : row,
       ),
     }));
   }
@@ -1342,6 +1399,7 @@ export default function App() {
         {
           id: nextGeneratedId('phase'),
           label: '',
+          abbreviation: '',
           startWeekIndex: 0,
           endWeekIndex: Math.min(1, Math.max(parsedWeekCount - 1, 0)),
         },
@@ -1351,7 +1409,7 @@ export default function App() {
 
   function updatePhaseBlock(
     blockId: string,
-    field: keyof Pick<PhaseBlock, 'label' | 'startWeekIndex' | 'endWeekIndex'>,
+    field: keyof Pick<PhaseBlock, 'label' | 'abbreviation' | 'startWeekIndex' | 'endWeekIndex'>,
     value: string,
   ) {
     setWeekDesign((previous) => ({
@@ -1365,6 +1423,13 @@ export default function App() {
           return {
             ...block,
             label: value,
+          };
+        }
+
+        if (field === 'abbreviation') {
+          return {
+            ...block,
+            abbreviation: sanitizeAbbreviation(value),
           };
         }
 
@@ -1622,7 +1687,7 @@ export default function App() {
       const zip = new JSZip();
 
       zip.file('training-plan-chart.png', await chartBlob.arrayBuffer());
-      zip.file('week-design.png', await weekDesignBlob.arrayBuffer());
+      zip.file('week-focus.png', await weekDesignBlob.arrayBuffer());
       zip.file('calendar.xlsx', workbookBytes);
 
       const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -1839,6 +1904,8 @@ export default function App() {
             <Chart
               data={parsedWeeks}
               eventGrades={weekDesign.events.map((event) => event.eventGrade)}
+              focusAbbreviations={chartFocusAbbreviations}
+              weekLabels={chartWeekLabels}
             />
           </section>
         </aside>
@@ -1863,6 +1930,15 @@ export default function App() {
           <div className="form-top">
             <div className="tab-bar" role="tablist" aria-label="Planning modes">
               <button
+                aria-selected={activeTab === 'week'}
+                className={`tab-button ${activeTab === 'week' ? 'tab-button-active' : ''}`}
+                onClick={() => setActiveTab('week')}
+                role="tab"
+                type="button"
+              >
+                Week Focus
+              </button>
+              <button
                 aria-selected={activeTab === 'volume'}
                 className={`tab-button ${activeTab === 'volume' ? 'tab-button-active' : ''}`}
                 onClick={() => setActiveTab('volume')}
@@ -1870,15 +1946,6 @@ export default function App() {
                 type="button"
               >
                 Volume Design
-              </button>
-              <button
-                aria-selected={activeTab === 'week'}
-                className={`tab-button ${activeTab === 'week' ? 'tab-button-active' : ''}`}
-                onClick={() => setActiveTab('week')}
-                role="tab"
-                type="button"
-              >
-                Week Design
               </button>
               <button
                 aria-selected={activeTab === 'calendar'}
@@ -1895,48 +1962,46 @@ export default function App() {
               <>
                 <div className="section-head section-head-form">
                   <div>
-                    <p className="eyebrow">Weekly Inputs</p>
-                    <h2>Fill each week to drive the chart</h2>
+                    <p className="eyebrow">Volume Design</p>
+                    <h2>Fill the weekly volume targets that drive the chart</h2>
                   </div>
                   <p className="section-note">
-                    Blank values render as zero. If Z2 + Z3 is greater than total time, that week
-                    is flagged and removed from the stacked bar until corrected.
-                  </p>
-                </div>
-
-                <label className="field-group" htmlFor={weeksInputId}>
-                  <span className="field-label">Weeks</span>
-                  <input
-                    className="text-input weeks-input"
-                    id={weeksInputId}
-                    inputMode="numeric"
-                    max={52}
-                    min={0}
-                    onChange={(event) => setWeeksInput(event.target.value)}
-                    type="number"
-                    value={weeksInput}
-                  />
-                </label>
-                <p className={`helper-text ${invalidWeekCount ? 'helper-text-error' : ''}`}>
-                  {invalidWeekCount
-                    ? 'Use a whole number from 0 to 52.'
-                    : 'Rows and bars appear instantly from the week count.'}
-                </p>
-              </>
-            ) : activeTab === 'week' ? (
-              <>
-                <div className="section-head section-head-form">
-                  <div>
-                    <p className="eyebrow">Week Design</p>
-                    <h2>Map weekly focus toward race day</h2>
-                  </div>
-                  <p className="section-note">
-                    The grid uses the week count from Volume Design. Check as many focus rows as
-                    you need for each week, and use phase blocks for longer training themes.
+                    Week count now comes from Week Focus. Blank values render as zero. If Z2 + Z3
+                    is greater than total time, that week is flagged and removed from the stacked
+                    bar until corrected.
                   </p>
                 </div>
 
                 <div className="planner-toolbar">
+                  <div className="planner-chip">
+                    <span>Weeks in plan</span>
+                    <strong>{parsedWeekCount}</strong>
+                  </div>
+                  <div className="planner-chip">
+                    <span>Race date</span>
+                    <strong>{weekDesign.raceDate || 'Set in Week Focus'}</strong>
+                  </div>
+                </div>
+                <p className="helper-text">
+                  Enter the weekly targets here after setting the plan length in Week Focus.
+                </p>
+              </>
+            ) : activeTab === 'week' ? (
+              <>
+                <div className="planner-toolbar">
+                  <label className="field-group" htmlFor={weeksInputId}>
+                    <span className="field-label">Weeks</span>
+                    <input
+                      className="text-input weeks-input"
+                      id={weeksInputId}
+                      inputMode="numeric"
+                      max={52}
+                      min={0}
+                      onChange={(event) => setWeeksInput(event.target.value)}
+                      type="number"
+                      value={weeksInput}
+                    />
+                  </label>
                   <label className="field-group" htmlFor="race-date">
                     <span className="field-label">Race Date</span>
                     <input
@@ -1947,15 +2012,10 @@ export default function App() {
                       value={weekDesign.raceDate}
                     />
                   </label>
-                  <div className="planner-chip">
-                    <span>Weeks in plan</span>
-                    <strong>{parsedWeekCount}</strong>
-                  </div>
                 </div>
-                <p className="helper-text">
-                  Weeks count down to race week from left to right. Start-of-week dates are Monday
-                  based.
-                </p>
+                {invalidWeekCount ? (
+                  <p className="helper-text helper-text-error">Use a whole number from 0 to 52.</p>
+                ) : null}
               </>
             ) : (
               <>
@@ -1977,11 +2037,11 @@ export default function App() {
                   </div>
                   <div className="planner-chip">
                     <span>Race date</span>
-                    <strong>{weekDesign.raceDate || 'Set in Week Design'}</strong>
+                    <strong>{weekDesign.raceDate || 'Set in Week Focus'}</strong>
                   </div>
                 </div>
                 <p className="helper-text">
-                  Calendar weeks are Monday to Sunday. Use Week Design to change the race date
+                  Calendar weeks are Monday to Sunday. Use Week Focus to change the race date
                   driving this timeline.
                 </p>
               </>
@@ -1990,7 +2050,9 @@ export default function App() {
 
           {activeTab === 'volume' ? (
             weeks.length === 0 ? (
-              <div className="empty-state">Enter a positive week count to generate the input grid.</div>
+              <div className="empty-state">
+                Set a positive week count in Week Focus to generate the input grid.
+              </div>
             ) : (
               <div className="weeks-grid">
                 {weeks.map((week, index) => {
@@ -2084,24 +2146,17 @@ export default function App() {
             <div className="week-design-layout">
               {parsedWeekCount === 0 ? (
                 <div className="empty-state">
-                  Set a positive week count in Volume Design to build the week planner.
+                  Set a positive week count in Week Focus to build the week planner.
                 </div>
               ) : (
                 <>
                   <section className="planner-panel">
                     <div className="planner-panel-head">
-                      <div>
-                        <p className="eyebrow">Phase Goals</p>
-                        <h3 className="planner-subtitle">Assign multi-week development blocks</h3>
-                      </div>
+                      <p className="eyebrow">Phase Goals</p>
                       <button className="secondary-button" onClick={addPhaseBlock} type="button">
                         Add Phase Goal
                       </button>
                     </div>
-                    <p className="helper-text">
-                      A practical default is 2-4 weeks per development phase, then 1-2 weeks for
-                      taper closer to race day.
-                    </p>
 
                     {weekDesign.phaseBlocks.length === 0 ? (
                       <div className="planner-empty-line">
@@ -2136,7 +2191,7 @@ export default function App() {
                               >
                                 {weekColumns.map((column, index) => (
                                   <option key={`phase-start-${index + 1}`} value={index}>
-                                    {column.weeksToRace} w to race
+                                    {`Wk. ${column.weeksToRace}`}
                                   </option>
                                 ))}
                               </select>
@@ -2153,7 +2208,7 @@ export default function App() {
                               >
                                 {weekColumns.map((column, index) => (
                                   <option key={`phase-end-${index + 1}`} value={index}>
-                                    {column.weeksToRace} w to race
+                                    {`Wk. ${column.weeksToRace}`}
                                   </option>
                                 ))}
                               </select>
@@ -2174,10 +2229,7 @@ export default function App() {
 
                   <section className="planner-panel">
                     <div className="planner-panel-head">
-                      <div>
-                        <p className="eyebrow">Focus Rows</p>
-                        <h3 className="planner-subtitle">Check the weekly themes that matter</h3>
-                      </div>
+                      <p className="eyebrow">Focus Rows</p>
                       <button className="secondary-button" onClick={addCustomFocusRow} type="button">
                         Add Focus Row
                       </button>
@@ -2191,6 +2243,7 @@ export default function App() {
                           <th className="week-design-sticky-column week-design-label" scope="col">
                             Month
                           </th>
+                          <th className="week-design-sticky-column week-design-abbr-label" scope="col" />
                           {monthSegments.map((segment) => (
                             <th
                               className="week-design-header-group"
@@ -2206,6 +2259,7 @@ export default function App() {
                           <th className="week-design-sticky-column week-design-label" scope="col">
                             Start of Week
                           </th>
+                          <th className="week-design-sticky-column week-design-abbr-label" scope="col" />
                           {weekColumns.map((column, index) => (
                             <th
                               className={`week-design-header-cell ${
@@ -2222,6 +2276,7 @@ export default function App() {
                           <th className="week-design-sticky-column week-design-label" scope="col">
                             Weeks to Race
                           </th>
+                          <th className="week-design-sticky-column week-design-abbr-label" scope="col" />
                           {weekColumns.map((column, index) => (
                             <th
                               className={`week-design-header-cell ${
@@ -2240,6 +2295,7 @@ export default function App() {
                           <th className="week-design-sticky-column week-design-label" scope="row">
                             Event Name
                           </th>
+                          <td className="week-design-sticky-column week-design-abbr-cell" />
                           {weekDesign.events.map((event, index) => (
                             <td key={`event-name-${index + 1}`}>
                               <input
@@ -2258,6 +2314,7 @@ export default function App() {
                           <th className="week-design-sticky-column week-design-label" scope="row">
                             Event Grade
                           </th>
+                          <td className="week-design-sticky-column week-design-abbr-cell" />
                           {weekDesign.events.map((event, index) => (
                             <td key={`event-grade-${index + 1}`}>
                               <select
@@ -2279,6 +2336,7 @@ export default function App() {
                           <th className="week-design-sticky-column week-design-label" scope="row">
                             Phase Goal
                           </th>
+                          <td className="week-design-sticky-column week-design-abbr-cell" />
                           {phaseSegments.map((segment, index) => (
                             <td
                               className={`week-design-phase-cell ${
@@ -2317,6 +2375,17 @@ export default function App() {
                                 row.label
                               )}
                             </th>
+                            <td className="week-design-sticky-column week-design-abbr-cell">
+                              <input
+                                className="week-grid-input week-grid-input-abbr"
+                                maxLength={2}
+                                onChange={(event) =>
+                                  updateFocusRowAbbreviation(row.id, event.target.value)
+                                }
+                                type="text"
+                                value={row.abbreviation}
+                              />
+                            </td>
                             {weekColumns.map((column, weekIndex) => (
                               <td
                                 className={column.isRaceWeek ? 'week-design-race-week-cell' : ''}
@@ -2342,11 +2411,11 @@ export default function App() {
             </div>
           ) : parsedWeekCount === 0 ? (
             <div className="empty-state">
-              Set a positive week count in Volume Design to build the calendar.
+              Set a positive week count in Week Focus to build the calendar.
             </div>
           ) : !weekDesign.raceDate ? (
             <div className="empty-state">
-              Set a race date in Week Design before using the calendar view.
+              Set a race date in Week Focus before using the calendar view.
             </div>
           ) : (
             <div className="calendar-layout">
@@ -2478,12 +2547,12 @@ export default function App() {
       <div aria-hidden="true" className="export-sandbox">
         <div className="export-card" ref={weekDesignExportRef}>
           <div className="export-card-head">
-            <h2>Week Design</h2>
+            <h2>Week Focus</h2>
             <span>{weekDesign.raceDate ? `Race Date ${weekDesign.raceDate}` : 'Race Date not set'}</span>
           </div>
 
           {parsedWeekCount === 0 ? (
-            <div className="export-empty">Set a week count in Volume Design to export Week Design.</div>
+            <div className="export-empty">Set a week count in Week Focus to export Week Focus.</div>
           ) : (
             <table className="week-design-table week-design-export-table">
               <thead>
@@ -2491,6 +2560,7 @@ export default function App() {
                   <th className="week-design-label" scope="col">
                     Month
                   </th>
+                  <th className="week-design-abbr-label" scope="col" />
                   {monthSegments.map((segment, index) => (
                     <th
                       className="week-design-header-group"
@@ -2506,6 +2576,7 @@ export default function App() {
                   <th className="week-design-label" scope="col">
                     Start of Week
                   </th>
+                  <th className="week-design-abbr-label" scope="col" />
                   {weekColumns.map((column, index) => (
                     <th className="week-design-header-cell" key={`export-start-${index + 1}`} scope="col">
                       {formatWeekStart(column.startDate)}
@@ -2516,6 +2587,7 @@ export default function App() {
                   <th className="week-design-label" scope="col">
                     Weeks to Race
                   </th>
+                  <th className="week-design-abbr-label" scope="col" />
                   {weekColumns.map((column, index) => (
                     <th className="week-design-header-cell" key={`export-count-${index + 1}`} scope="col">
                       {column.weeksToRace}
@@ -2528,6 +2600,7 @@ export default function App() {
                   <th className="week-design-label" scope="row">
                     Event Name
                   </th>
+                  <td className="week-design-abbr-cell" />
                   {weekDesign.events.map((event, index) => (
                     <td key={`export-event-name-${index + 1}`}>{event.eventName}</td>
                   ))}
@@ -2536,6 +2609,7 @@ export default function App() {
                   <th className="week-design-label" scope="row">
                     Event Grade
                   </th>
+                  <td className="week-design-abbr-cell" />
                   {weekDesign.events.map((event, index) => (
                     <td key={`export-event-grade-${index + 1}`}>{event.eventGrade}</td>
                   ))}
@@ -2544,6 +2618,7 @@ export default function App() {
                   <th className="week-design-label" scope="row">
                     Phase Goal
                   </th>
+                  <td className="week-design-abbr-cell" />
                   {phaseSegments.map((segment, index) => (
                     <td
                       className={`week-design-phase-cell ${
@@ -2561,6 +2636,7 @@ export default function App() {
                     <th className="week-design-label" scope="row">
                       {row.label}
                     </th>
+                    <td className="week-design-abbr-cell">{row.abbreviation}</td>
                     {weekColumns.map((column, weekIndex) => (
                       <td key={`export-focus-cell-${row.id}-${weekIndex + 1}`}>
                         {weekDesign.focusSelections[row.id][weekIndex] ? (

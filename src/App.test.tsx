@@ -41,6 +41,15 @@ describe('planner snapshot restore', () => {
         focusSelections: {
           recovery: [true, false, false],
         },
+        phaseBlocks: [
+          {
+            id: 'phase-1',
+            label: 'Base',
+            abbreviation: 'BA',
+            startWeekIndex: 0,
+            endWeekIndex: 1,
+          },
+        ],
       },
       scheduledWorkouts: {
         '2026-10-29': {
@@ -59,6 +68,8 @@ describe('planner snapshot restore', () => {
     expect(snapshot?.weeks).toHaveLength(3);
     expect(snapshot?.weekDesign.events).toHaveLength(3);
     expect(snapshot?.weekDesign.events[0].eventGrade).toBe('C');
+    expect(snapshot?.weekDesign.focusRows[0].abbreviation).toBe('R');
+    expect(snapshot?.weekDesign.phaseBlocks[0].abbreviation).toBe('BA');
     expect(snapshot?.scheduledWorkouts['2026-10-29']).toEqual({
       recovery: true,
       totalTime: '',
@@ -98,9 +109,17 @@ describe('planner snapshot restore', () => {
           weekDesign: {
             raceDate: '2027-02-14',
             events: [null, null],
-            focusRows: [{ id: 'recovery', label: 'Recovery', isCustom: false }],
+            focusRows: [{ id: 'recovery', label: 'Recovery', abbreviation: 'R', isCustom: false }],
             focusSelections: { recovery: [false, true] },
-            phaseBlocks: [],
+            phaseBlocks: [
+              {
+                id: 'phase-1',
+                label: 'Base',
+                abbreviation: 'BA',
+                startWeekIndex: 0,
+                endWeekIndex: 1,
+              },
+            ],
           },
           scheduledWorkouts: {
             '2027-02-08': {
@@ -154,7 +173,9 @@ describe('planner snapshot download', () => {
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
     const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0];
     expect(blob).toBeInstanceOf(Blob);
-    await expect(readBlobText(blob as Blob)).resolves.toContain('"weeksInput": "6"');
+    const json = await readBlobText(blob as Blob);
+    expect(json).toContain('"weeksInput": "6"');
+    expect(json).toContain('"abbreviation": "R"');
     expect(clickSpy).toHaveBeenCalledTimes(1);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:planner-state');
     clickSpy.mockRestore();

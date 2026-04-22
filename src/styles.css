@@ -198,19 +198,6 @@ code {
     0 8px 24px rgba(7, 18, 32, 0.24);
 }
 
-.hero-copy::after,
-.summary-card::after,
-.panel::after {
-  content: "";
-  position: absolute;
-  inset: auto -10% -36% auto;
-  width: 200px;
-  height: 200px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(227, 154, 95, 0.26), rgba(242, 229, 218, 0.08));
-  pointer-events: none;
-}
-
 .eyebrow {
   margin: 0 0 0.6rem;
   font-size: 0.82rem;
@@ -279,8 +266,9 @@ code {
 }
 
 .weeks-input {
-  font-size: 1.65rem;
+  font-size: 1rem;
   font-weight: 400;
+  line-height: 1.2;
 }
 
 .helper-text {
@@ -450,6 +438,7 @@ code {
 .legend-label,
 .axis-label,
 .week-label,
+.chart-focus-label,
 .axis-title {
   fill: var(--contrast-soft);
   font-size: 0.74rem;
@@ -463,6 +452,11 @@ code {
 .week-label {
   text-anchor: middle;
   font-weight: 700;
+}
+
+.chart-focus-label {
+  text-anchor: middle;
+  font-size: 0.62rem;
 }
 
 .axis-title {
@@ -574,15 +568,31 @@ code {
 
 .phase-block-list {
   display: grid;
-  gap: 0.7rem;
-  margin-top: 0.8rem;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
 }
 
 .phase-block-card {
   display: grid;
-  grid-template-columns: minmax(200px, 1.5fr) repeat(2, minmax(130px, 0.8fr)) auto;
-  gap: 0.75rem;
+  grid-template-columns: minmax(132px, 1.25fr) 88px 88px auto;
+  gap: 0.45rem;
   align-items: end;
+}
+
+.phase-block-card .field-group {
+  gap: 0.25rem;
+}
+
+.phase-block-card .text-input {
+  min-height: 2.35rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.75rem;
+}
+
+.phase-block-card .icon-button {
+  align-self: stretch;
+  min-height: 2.35rem;
+  padding: 0.5rem 0.7rem;
 }
 
 .secondary-button,
@@ -821,18 +831,31 @@ code {
 
 .week-design-table th,
 .week-design-table td {
-  min-width: 58px;
+  min-width: 44px;
   padding: 0;
   border: 1px solid rgba(242, 229, 218, 0.16);
   text-align: center;
 }
 
 .week-design-label {
-  min-width: 148px;
-  padding: 0.55rem 0.75rem;
+  min-width: 94px;
+  width: 94px;
+  max-width: 94px;
+  padding: 0.5rem 0.45rem;
   text-align: left;
-  font-size: 0.84rem;
+  font-size: 0.78rem;
   background: rgba(33, 70, 97, 0.98);
+  z-index: 2;
+  overflow-wrap: anywhere;
+}
+
+.week-design-abbr-label,
+.week-design-abbr-cell {
+  min-width: 46px;
+  width: 46px;
+  padding: 0.45rem 0.2rem;
+  background: rgba(33, 70, 97, 0.98);
+  color: var(--ink);
   z-index: 2;
 }
 
@@ -841,9 +864,14 @@ code {
   left: 0;
 }
 
+.week-design-abbr-label,
+.week-design-abbr-cell {
+  left: 94px;
+}
+
 .week-design-header-group,
 .week-design-header-cell {
-  padding: 0.45rem 0.22rem;
+  padding: 0.4rem 0.18rem;
   font-size: 0.7rem;
   font-weight: 400;
   background: rgba(39, 83, 116, 0.95);
@@ -856,7 +884,7 @@ code {
 }
 
 .week-design-header-cell {
-  min-width: 62px;
+  min-width: 46px;
   color: var(--ink);
 }
 
@@ -868,13 +896,22 @@ code {
 .week-grid-input,
 .week-grid-select {
   width: 100%;
-  min-width: 58px;
-  padding: 0.45rem 0.3rem;
+  min-width: 44px;
+  padding: 0.36rem 0.22rem;
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   text-align: center;
+  color: var(--ink);
+}
+
+.week-grid-input-abbr {
+  text-transform: uppercase;
+}
+
+.week-grid-select option {
+  color: #183246;
 }
 
 .week-grid-input:focus,
@@ -885,7 +922,7 @@ code {
 }
 
 .week-design-phase-cell {
-  padding: 0.58rem 0.24rem;
+  padding: 0.48rem 0.18rem;
   background: rgba(227, 154, 95, 0.18);
   font-size: 0.8rem;
   font-weight: 400;
@@ -902,8 +939,8 @@ code {
 }
 
 .week-design-export-table td {
-  min-width: 58px;
-  padding: 0.4rem 0.28rem;
+  min-width: 44px;
+  padding: 0.36rem 0.18rem;
   font-size: 0.78rem;
 }
 
@@ -921,25 +958,29 @@ code {
 
 .custom-row-editor {
   display: flex;
+  width: 100%;
+  min-width: 0;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.3rem;
 }
 
 .custom-row-input {
   width: 100%;
   min-width: 0;
-  padding: 0.45rem 0.6rem;
+  max-width: 100%;
+  padding: 0.36rem 0.45rem;
   border: 1px solid rgba(242, 229, 218, 0.16);
   border-radius: 0.75rem;
   background: rgba(39, 83, 116, 0.72);
   font: inherit;
+  font-size: 0.72rem;
   color: var(--ink);
 }
 
 .custom-row-remove {
   flex: 0 0 auto;
-  width: 1.8rem;
-  height: 1.8rem;
+  width: 1.55rem;
+  height: 1.55rem;
   background: rgba(193, 77, 77, 0.12);
   color: #8a3030;
   font-weight: 700;
