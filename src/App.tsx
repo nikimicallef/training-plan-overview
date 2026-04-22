@@ -101,6 +101,10 @@ type PlannerSnapshot = {
   scheduledWorkouts: Record<string, DayWorkout>;
 };
 
+export {
+  sanitizePlannerSnapshot,
+};
+
 const EMPTY_WEEK: WeekFormState = {
   totalTime: '',
   z3Time: '',
@@ -468,9 +472,28 @@ function sanitizePlannerSnapshot(value: unknown): PlannerSnapshot | null {
   }
 
   const uploadedWeeks = Array.isArray(value.weeks) ? value.weeks.map(sanitizeWeekForm) : [];
-  const rawWeeksInput = sanitizeString(value.weeksInput) || String(uploadedWeeks.length);
-  const weekCount = parseWeekCount(rawWeeksInput || String(uploadedWeeks.length));
+  const uploadedWeekDesign = isRecord(value.weekDesign) ? value.weekDesign : {};
+  const uploadedEventsLength = Array.isArray(uploadedWeekDesign.events)
+    ? uploadedWeekDesign.events.length
+    : 0;
+  const uploadedFocusSelectionLengths = isRecord(uploadedWeekDesign.focusSelections)
+    ? Object.values(uploadedWeekDesign.focusSelections).map((selection) =>
+        Array.isArray(selection) ? selection.length : 0,
+      )
+    : [];
+  const inferredWeekCount = Math.max(
+    uploadedWeeks.length,
+    uploadedEventsLength,
+    ...uploadedFocusSelectionLengths,
+  );
+  const rawWeeksInput = sanitizeString(value.weeksInput);
+  const parsedWeeksInputCount = parseWeekCount(rawWeeksInput);
+  const weekCount =
+    rawWeeksInput.trim() === '' || parsedWeeksInputCount === 0
+      ? inferredWeekCount
+      : parsedWeeksInputCount;
   const activeTab = sanitizeString(value.activeTab);
+  const normalizedWeeksInput = rawWeeksInput.trim() === '' ? String(weekCount) : rawWeeksInput;
 
   return {
     version: Number.parseInt(String(value.version ?? '1'), 10) || 1,
@@ -478,7 +501,7 @@ function sanitizePlannerSnapshot(value: unknown): PlannerSnapshot | null {
       activeTab === 'volume' || activeTab === 'week' || activeTab === 'calendar'
         ? activeTab
         : 'volume',
-    weeksInput: rawWeeksInput,
+    weeksInput: normalizedWeeksInput,
     weeks: resizeWeeks(weekCount, uploadedWeeks),
     weekDesign: sanitizeWeekDesignState(value.weekDesign, weekCount),
     scheduledWorkouts: sanitizeScheduledWorkouts(value.scheduledWorkouts),
@@ -707,6 +730,20 @@ function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
+function readTextFromFile(file: File): Promise<string> {
+  if (typeof file.text === 'function') {
+    return file.text();
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error('Unable to read the selected file.'));
+    reader.readAsText(file);
+  });
+}
+
 function buildMonthSegments(columns: WeekColumn[]): Array<{ label: string; span: number }> {
   if (columns.length === 0) {
     return [];
@@ -863,6 +900,10 @@ function deriveWeek(week: WeekFormState, index: number): ParsedWeek {
     elevationMeters: safeElevation,
     errors,
   };
+}
+
+function getPrescribedWeek(parsedWeeks: ParsedWeek[], weekIndex: number): ParsedWeek {
+  return parsedWeeks[weekIndex] ?? deriveWeek({ ...EMPTY_WEEK }, weekIndex);
 }
 
 function Chart({
@@ -1419,7 +1460,7 @@ export default function App() {
       ...weekColumns.map((column, weekIndex) => {
         const weekDates = getWeekDates(column.startDate);
         const scheduledSummary = summarizeWeekSchedule(weekDates, scheduledWorkouts);
-        const prescribedWeek = parsedWeeks[weekIndex];
+        const prescribedWeek = getPrescribedWeek(parsedWeeks, weekIndex);
 
         return [
           `Week ${weekIndex + 1}\n${column.weeksToRace} w to race${
@@ -1477,7 +1518,7 @@ export default function App() {
     }
 
     try {
-      const parsed = JSON.parse(await file.text()) as unknown;
+      const parsed = JSON.parse(await readTextFromFile(file)) as unknown;
       const snapshot = sanitizePlannerSnapshot(parsed);
 
       if (!snapshot) {
@@ -2247,7 +2288,7 @@ export default function App() {
                     {weekColumns.map((column, weekIndex) => {
                       const weekDates = getWeekDates(column.startDate);
                       const scheduledSummary = summarizeWeekSchedule(weekDates, scheduledWorkouts);
-                      const prescribedWeek = parsedWeeks[weekIndex];
+                      const prescribedWeek = getPrescribedWeek(parsedWeeks, weekIndex);
 
                       return (
                         <tr key={`calendar-week-${weekIndex + 1}`}>
