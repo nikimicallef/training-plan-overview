@@ -2588,14 +2588,14 @@ export default function App() {
                       Niki Micallef
                     </a>{' '}
                     from{' '}
-                    <a href="https://bornonthetrail.substack.com/" rel="noreferrer" target="_blank">
+                    <a href="https://www.bornonthetrail.com/" rel="noreferrer" target="_blank">
                       Born on the Trail
                     </a>
                     .
                   </p>
                   <p>
                     Visit{' '}
-                    <a href="https://bornonthetrail.substack.com/" rel="noreferrer" target="_blank">
+                    <a href="https://www.bornonthetrail.com/" rel="noreferrer" target="_blank">
                       Born on the Trail
                     </a>{' '}
                     for science-informed articles on training and racing trail and ultra marathons.
@@ -3652,7 +3652,7 @@ export default function App() {
                   </a>{' '}
                   from{' '}
                   <a
-                    href="https://www.instagram.com/bornonthetrail/"
+                    href="https://www.bornonthetrail.com/"
                     rel="noreferrer"
                     target="_blank"
                   >

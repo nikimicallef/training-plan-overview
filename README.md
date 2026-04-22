@@ -118,7 +118,7 @@ This project is licensed under the custom attribution terms in [LICENSE.md](/Use
 
 Copying, forking, modifying, and redistributing are allowed, but public reuse must include this attribution line prominently:
 
-Built on top of a project created by [Niki Micallef](https://www.instagram.com/niki.runs/) from [Born on the Trail](https://www.instagram.com/bornonthetrail/), originally hosted on [GitHub](https://github.com/nikimicallef/training-plan-overview).
+Built on top of a project created by [Niki Micallef](https://www.instagram.com/niki.runs/) from [Born on the Trail](https://www.bornonthetrail.com/), originally hosted on [GitHub](https://github.com/nikimicallef/training-plan-overview).
 
 ## Common Commands
 

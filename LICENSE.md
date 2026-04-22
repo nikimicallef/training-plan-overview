@@ -8,7 +8,7 @@ Permission is granted to use, copy, modify, publish, distribute, and fork this p
 
 1. Any public fork, copy, derivative work, adaptation, redistribution, hosted version, or substantially reused version of this project must include the following attribution line prominently and explicitly:
 
-   `Built on top of a project created by [Niki Micallef](https://www.instagram.com/niki.runs/) from [Born on the Trail](https://www.instagram.com/bornonthetrail/), originally hosted on [GitHub](https://github.com/nikimicallef/training-plan-overview).`
+   `Built on top of a project created by [Niki Micallef](https://www.instagram.com/niki.runs/) from [Born on the Trail](https://www.bornonthetrail.com/), originally hosted on [GitHub](https://github.com/nikimicallef/training-plan-overview).`
 
 2. The attribution must be easy to find by a normal user and must not be hidden in source code comments alone. For example, it should appear in a README, about screen, footer, settings page, modal, landing page, or equivalent prominent location.
 
