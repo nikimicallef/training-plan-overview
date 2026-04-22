@@ -7,26 +7,12 @@
 
 The project declares `node >=24.0.0` in [package.json](/Users/micalln/workspace/training-plan-overview/package.json).
 
-If this machine resolves an older `node` by default, use the Homebrew Node path:
-
-```bash
-env PATH=/opt/homebrew/bin:$PATH <command>
-```
-
-Examples in this README use plain `npm`, but the `PATH` prefix may be required on this machine.
-
 ## Install
 
 From the project root:
 
 ```bash
 npm install
-```
-
-If needed:
-
-```bash
-env PATH=/opt/homebrew/bin:$PATH npm install
 ```
 
 ## Environment
@@ -126,22 +112,13 @@ Those tests:
 
 Do not enable them in CI unless you intentionally want external API traffic and have provided a valid API key.
 
-## GitHub Pages
+## License
 
-The app is configured for GitHub Pages deployment through GitHub Actions.
+This project is licensed under the custom attribution terms in [LICENSE.md](/Users/micalln/workspace/training-plan-overview/LICENSE.md).
 
-Relevant files:
+Copying, forking, modifying, and redistributing are allowed, but public reuse must include this attribution line prominently:
 
-- [vite.config.ts](/Users/micalln/workspace/training-plan-overview/vite.config.ts)
-- [.github/workflows/deploy-pages.yml](/Users/micalln/workspace/training-plan-overview/.github/workflows/deploy-pages.yml)
-- [public/.nojekyll](/Users/micalln/workspace/training-plan-overview/public/.nojekyll)
-
-To deploy:
-
-1. Push the repository to GitHub.
-2. Open `Settings -> Pages`.
-3. Set `Source` to `GitHub Actions`.
-4. Push to the configured branch or run the workflow manually.
+Built on top of a project created by [Niki Micallef](https://www.instagram.com/niki.runs/) from [Born on the Trail](https://www.instagram.com/bornonthetrail/), originally hosted on [GitHub](https://github.com/nikimicallef/training-plan-overview).
 
 ## Common Commands
 

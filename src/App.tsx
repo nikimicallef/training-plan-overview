@@ -3638,6 +3638,37 @@ export default function App() {
                   <a href="mailto:niki@bornonthetrail.com">niki@bornonthetrail.com</a>.
                 </p>
               </section>
+
+              <section className="instructions-section">
+                <h4>License & Attribution</h4>
+                <p>
+                  You are welcome to copy, fork, and build on this project, but public reuse should
+                  keep clear attribution to the original project.
+                </p>
+                <p>
+                  Built on top of a project created by{' '}
+                  <a href="https://www.instagram.com/niki.runs/" rel="noreferrer" target="_blank">
+                    Niki Micallef
+                  </a>{' '}
+                  from{' '}
+                  <a
+                    href="https://www.instagram.com/bornonthetrail/"
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Born on the Trail
+                  </a>
+                  , originally hosted on{' '}
+                  <a
+                    href="https://github.com/nikimicallef/training-plan-overview"
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    GitHub
+                  </a>
+                  .
+                </p>
+              </section>
             </div>
           </div>
         </div>
