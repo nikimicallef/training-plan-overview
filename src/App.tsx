@@ -1652,6 +1652,7 @@ export default function App() {
   const [activeCalendarDate, setActiveCalendarDate] = useState<Date | null>(null);
   const [calendarDraft, setCalendarDraft] = useState<DayWorkout>({ ...EMPTY_DAY_WORKOUT });
   const [calendarDraftErrors, setCalendarDraftErrors] = useState<string[]>([]);
+  const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
   const [isIntervalsModalOpen, setIsIntervalsModalOpen] = useState(false);
   const [intervalsApiKey, setIntervalsApiKey] = useState('');
   const [isSyncingIntervals, setIsSyncingIntervals] = useState(false);
@@ -2140,6 +2141,10 @@ export default function App() {
     setIsIntervalsModalOpen(true);
   }
 
+  function closeInstructionsModal() {
+    setIsInstructionsModalOpen(false);
+  }
+
   function closeIntervalsModal() {
     if (isSyncingIntervals) {
       return;
@@ -2594,6 +2599,13 @@ export default function App() {
               </div>
               <div className="hero-actions">
                 <div className="hero-action-stack">
+                  <button
+                    className="hero-help-button"
+                    onClick={() => setIsInstructionsModalOpen(true)}
+                    type="button"
+                  >
+                    How To Use
+                  </button>
                   <button className="secondary-button" onClick={openIntervalsModal} type="button">
                     Push to Intervals.icu
                   </button>
@@ -3453,6 +3465,140 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {isInstructionsModalOpen ? (
+        <div className="modal-backdrop" onClick={closeInstructionsModal} role="presentation">
+          <div
+            aria-labelledby="instructions-modal-title"
+            aria-modal="true"
+            className="modal-card instructions-modal-card"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="modal-head">
+              <div>
+                <p className="eyebrow">How To Use</p>
+                <h3 id="instructions-modal-title" className="modal-title">
+                  Training Plan Builder Instructions
+                </h3>
+              </div>
+              <button className="modal-close" onClick={closeInstructionsModal} type="button">
+                x
+              </button>
+            </div>
+
+            <div className="instructions-copy">
+              <section className="instructions-section">
+                <h4>Week Focus</h4>
+                <p>
+                  Start here. Set the number of weeks in your build and your race date, then map out
+                  what each week is meant to do.
+                </p>
+                <p>
+                  Use <strong>Event Name</strong> and <strong>Event Grade</strong> to mark tune-up
+                  races, key races, and lower-priority events. The event grade also feeds into the
+                  left-side chart background so you can immediately see where the most important weeks
+                  sit.
+                </p>
+                <p>
+                  Add <strong>Phase Goals</strong> when you want several weeks grouped together under
+                  one development block, for example base, climbing, race-specific work, or taper.
+                </p>
+                <p>
+                  Use the <strong>Focus Rows</strong> grid to mark the main emphasis of each week.
+                  You can keep the default rows or add custom ones. The abbreviations you select here
+                  also appear underneath the chart columns on the left.
+                </p>
+              </section>
+
+              <section className="instructions-section">
+                <h4>Volume Design</h4>
+                <p>
+                  Once the structure is clear, move to Volume Design and enter the training load for
+                  each week.
+                </p>
+                <p>
+                  Total Time sets the full height of the weekly bar. Z3 and Z2 are entered directly,
+                  while Z1 is calculated automatically from whatever time remains.
+                </p>
+                <p>
+                  Long Run is entered as a percentage of total time, and elevation is tracked
+                  separately on the right axis. As you enter the weekly targets, the left-side chart
+                  updates immediately.
+                </p>
+                <p>
+                  The summary strip above the chart gives you the total volume, total time, time in
+                  zone, and total elevation across the full plan.
+                </p>
+                <p>
+                  Use the <strong>Metric / Imperial</strong> toggle above the planner tabs whenever
+                  you want elevation displayed in meters or feet. The app updates the elevation
+                  labels and values across the planner when you switch.
+                </p>
+              </section>
+
+              <section className="instructions-section">
+                <h4>Calendar</h4>
+                <p>
+                  Use the Calendar tab to turn the weekly plan into day-by-day sessions. The
+                  prescribed column stays tied to Volume Design, while the scheduled column rolls up
+                  what you actually enter for each day.
+                </p>
+                <p>
+                  Click any day to open the daily workout modal. You can give the session a title,
+                  choose a workout type, enter time and zone details where relevant, add elevation,
+                  and keep notes for context or reminders.
+                </p>
+                <p>
+                  Rest days can be planned directly, and different workout types only show the fields
+                  that matter for that type. The calendar cells then display the title, type, session
+                  breakdown, and elevation in a compact format.
+                </p>
+              </section>
+
+              <section className="instructions-section">
+                <h4>Push to Intervals.icu</h4>
+                <p>
+                  Use the <strong>Push to Intervals.icu</strong> button when you want to send the
+                  visible calendar plan to your Intervals account. Nothing is sent automatically. The
+                  push only happens when you open that modal, enter your API key, and press
+                  <strong> Update</strong>.
+                </p>
+                <p>
+                  New calendar entries are created in Intervals.icu, previously synced entries are
+                  updated using their stored ICU ID, and entries you removed locally can be deleted on
+                  the next push.
+                </p>
+                <p>
+                  The progress bar in the modal shows how many entries have already been processed and
+                  how many remain. After a successful push, the returned Intervals.icu ID is stored in
+                  the planner so future updates target the correct event.
+                </p>
+                <p>
+                  The API key is only kept in memory for the session. If you need one, create it in
+                  Intervals.icu under <strong>Settings &gt; Developer Settings</strong>.
+                </p>
+              </section>
+
+              <section className="instructions-section">
+                <h4>Feedback</h4>
+                <p>
+                  If you find a bug, report it on{' '}
+                  <a
+                    href="https://github.com/nikimicallef/training-plan-overview/issues"
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    GitHub Issues
+                  </a>{' '}
+                  or contact me at{' '}
+                  <a href="mailto:niki@bornonthetrail.com">niki@bornonthetrail.com</a>.
+                </p>
+              </section>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isIntervalsModalOpen ? (
         <div className="modal-backdrop" onClick={closeIntervalsModal} role="presentation">

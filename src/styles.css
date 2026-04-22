@@ -758,6 +758,23 @@ code {
   font-weight: 400;
 }
 
+.hero-help-button {
+  padding: 0.78rem 0.95rem;
+  border: 0;
+  border-radius: 0.9rem;
+  background: #e39a5f;
+  color: #183246;
+  font: inherit;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.hero-help-button:hover,
+.hero-help-button:focus-visible {
+  outline: none;
+  background: #e5b58e;
+}
+
 .secondary-button:disabled {
   cursor: wait;
   opacity: 0.72;
@@ -1314,6 +1331,12 @@ code {
   width: min(760px, 100%);
 }
 
+.instructions-modal-card {
+  width: min(1120px, calc(100vw - 2rem));
+  height: calc(100vh - 2rem);
+  max-height: calc(100vh - 2rem);
+}
+
 .modal-head {
   display: flex;
   justify-content: space-between;
@@ -1400,6 +1423,44 @@ code {
 
 .modal-error-list {
   margin-top: 0.85rem;
+}
+
+.instructions-copy {
+  display: grid;
+  gap: 1.15rem;
+  padding-right: 0.35rem;
+}
+
+.instructions-section {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.instructions-section h4 {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.instructions-section p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.instructions-section a {
+  color: var(--accent-soft);
+  text-decoration: none;
+}
+
+.instructions-section a:hover,
+.instructions-section a:focus-visible {
+  color: var(--contrast-soft);
+  text-decoration: underline;
 }
 
 .intervals-progress-panel {
