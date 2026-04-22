@@ -83,6 +83,23 @@ type DayWorkout = {
   z2Time: string;
   elevation: string;
   notes: string;
+  intervalsIcuId: string;
+};
+
+type PendingIntervalsDelete = {
+  dateKey: string;
+  intervalsIcuId: string;
+};
+
+type IntervalsSyncState = {
+  completed: number;
+  total: number;
+  created: number;
+  updated: number;
+  deleted: number;
+  failed: number;
+  failures: string[];
+  statusMessage: string;
 };
 
 type ParsedDayWorkout = {
@@ -115,6 +132,7 @@ type PlannerSnapshot = {
   weeks: WeekFormState[];
   weekDesign: WeekDesignState;
   scheduledWorkouts: Record<string, DayWorkout>;
+  pendingIntervalsDeletes: PendingIntervalsDelete[];
 };
 
 export {
@@ -142,12 +160,15 @@ const EMPTY_DAY_WORKOUT: DayWorkout = {
   z2Time: '',
   elevation: '',
   notes: '',
+  intervalsIcuId: '',
 };
 
 const DEFAULT_WEEK_COUNT = 6;
 const LEFT_AXIS_TICKS = 5;
 const RIGHT_AXIS_TICKS = 5;
 const FEET_PER_METER = 3.28084;
+const INTERVALS_BASE_URL = 'https://intervals.icu/api/v1/athlete/0/events';
+const INTERVALS_REQUEST_DELAY_MS = 120;
 const DEFAULT_FOCUS_ROWS: FocusRow[] = [
   { id: 'recovery', label: 'Recovery', abbreviation: 'R', isCustom: false },
   { id: 'z1-focus', label: 'Z1', abbreviation: 'Z1', isCustom: false },
@@ -182,6 +203,19 @@ const WORKOUT_TYPE_OPTIONS: Array<{ value: Exclude<WorkoutType, ''>; label: stri
   { value: 'other', label: 'Other' },
   { value: 'rest', label: 'Rest' },
 ];
+
+function createEmptyIntervalsSyncState(): IntervalsSyncState {
+  return {
+    completed: 0,
+    total: 0,
+    created: 0,
+    updated: 0,
+    deleted: 0,
+    failed: 0,
+    failures: [],
+    statusMessage: '',
+  };
+}
 
 function getEventGradeBandColor(grade: EventGrade): string | null {
   if (grade === 'A') {
@@ -439,6 +473,18 @@ function sanitizeString(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function sanitizeIntervalsIcuId(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  return '';
+}
+
 function sanitizeBoolean(value: unknown): boolean {
   return value === true;
 }
@@ -469,6 +515,34 @@ function isTimeOnlyWorkoutType(type: WorkoutType): boolean {
 
 function isRestWorkoutType(type: WorkoutType): boolean {
   return type === 'rest';
+}
+
+function getIntervalsExternalId(dateKey: string): string {
+  return `training-plan-overview:${dateKey}`;
+}
+
+function getIntervalsEventType(type: WorkoutType): string | undefined {
+  if (type === 'road-run') {
+    return 'Run';
+  }
+
+  if (type === 'trail-run') {
+    return 'Trail Run';
+  }
+
+  if (type === 'cycling') {
+    return 'Ride';
+  }
+
+  if (type === 'strength') {
+    return 'WeightTraining';
+  }
+
+  if (type === 'hiking' || type === 'other') {
+    return 'Other Workout';
+  }
+
+  return undefined;
 }
 
 function sanitizeWeekForm(value: unknown): WeekFormState {
@@ -562,7 +636,38 @@ function sanitizeDayWorkout(value: unknown): DayWorkout {
     z2Time,
     elevation,
     notes,
+    intervalsIcuId: isRecord(value) ? sanitizeIntervalsIcuId(value.intervalsIcuId) : '',
   };
+}
+
+function sanitizePendingIntervalsDeletes(value: unknown): PendingIntervalsDelete[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seenDateKeys = new Set<string>();
+
+  return value
+    .map((entry) => {
+      if (!isRecord(entry)) {
+        return null;
+      }
+
+      const dateKey = sanitizeString(entry.dateKey);
+      const intervalsIcuId = sanitizeIntervalsIcuId(entry.intervalsIcuId);
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || !intervalsIcuId || seenDateKeys.has(dateKey)) {
+        return null;
+      }
+
+      seenDateKeys.add(dateKey);
+
+      return {
+        dateKey,
+        intervalsIcuId,
+      };
+    })
+    .filter((entry): entry is PendingIntervalsDelete => entry !== null);
 }
 
 function sanitizeWeekDesignState(value: unknown, weekCount: number): WeekDesignState {
@@ -655,6 +760,7 @@ function sanitizePlannerSnapshot(value: unknown): PlannerSnapshot | null {
     weeks: resizeWeeks(weekCount, uploadedWeeks),
     weekDesign: sanitizeWeekDesignState(value.weekDesign, weekCount),
     scheduledWorkouts: sanitizeScheduledWorkouts(value.scheduledWorkouts),
+    pendingIntervalsDeletes: sanitizePendingIntervalsDeletes(value.pendingIntervalsDeletes),
   };
 }
 
@@ -895,7 +1001,129 @@ function buildCalendarDayCellText(date: Date, workout: DayWorkout | undefined, u
     lines.push(`Notes: ${workout.notes.trim()}`);
   }
 
+  if (workout.intervalsIcuId) {
+    lines.push(`ICU ${workout.intervalsIcuId}`);
+  }
+
   return lines.join('\n');
+}
+
+function buildIntervalsEventDescription(workout: DayWorkout, unitSystem: UnitSystem): string | undefined {
+  if (isRestWorkoutType(workout.type)) {
+    return workout.notes.trim() || undefined;
+  }
+
+  const parsedWorkout = deriveDayWorkout(workout, unitSystem);
+  const showElevation = isEnduranceWorkoutType(workout.type) && workout.elevation.trim() !== '';
+  const lines = [
+    `Z3 ${formatMinutes(parsedWorkout.z3Minutes)} / Z2 ${formatMinutes(parsedWorkout.z2Minutes)} / Z1 ${formatMinutes(parsedWorkout.z1Minutes)}`,
+    `Elevation ${showElevation ? formatElevation(parsedWorkout.elevationMeters, unitSystem) : '-'}`,
+  ];
+
+  if (workout.notes.trim()) {
+    lines.push(workout.notes.trim());
+  }
+
+  return lines.join('\n');
+}
+
+type IntervalsEventRequestBody = {
+  category: 'WORKOUT' | 'NOTE';
+  start_date_local: string;
+  name?: string;
+  description?: string;
+  type?: string;
+  moving_time?: number;
+  external_id: string;
+};
+
+function buildIntervalsEventRequestBody(
+  dateKey: string,
+  workout: DayWorkout,
+  unitSystem: UnitSystem,
+): IntervalsEventRequestBody {
+  const start_date_local = `${dateKey}T00:00:00`;
+  const external_id = getIntervalsExternalId(dateKey);
+
+  if (isRestWorkoutType(workout.type)) {
+    return {
+      category: 'NOTE',
+      start_date_local,
+      name: 'Rest Day',
+      description: workout.notes.trim() || undefined,
+      external_id,
+    };
+  }
+
+  const parsedWorkout = deriveDayWorkout(workout, unitSystem);
+  const payload: IntervalsEventRequestBody = {
+    category: 'WORKOUT',
+    start_date_local,
+    type: getIntervalsEventType(workout.type),
+    moving_time: parsedWorkout.totalMinutes * 60,
+    description: buildIntervalsEventDescription(workout, unitSystem),
+    external_id,
+  };
+
+  if (workout.title.trim()) {
+    payload.name = workout.title.trim();
+  }
+
+  return payload;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function callIntervalsApi<T>(
+  apiKey: string,
+  path: string,
+  options: {
+    method: 'POST' | 'PUT' | 'DELETE';
+    body?: unknown;
+  },
+): Promise<T> {
+  const headers = new Headers({
+    Authorization: `Basic ${window.btoa(`API_KEY:${apiKey}`)}`,
+  });
+
+  if (options.body !== undefined) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const response = await fetch(`${INTERVALS_BASE_URL}${path}`, {
+    method: options.method,
+    headers,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+  });
+
+  const text = await response.text();
+  let parsed: unknown = null;
+
+  if (text) {
+    try {
+      parsed = JSON.parse(text) as unknown;
+    } catch {
+      parsed = text;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      isRecord(parsed) && typeof parsed.error === 'string'
+        ? parsed.error
+        : text || `${options.method} ${path} failed with ${response.status}.`;
+
+    throw {
+      status: response.status,
+      message,
+    };
+  }
+
+  return parsed as T;
 }
 
 function downloadBlob(filename: string, blob: Blob) {
@@ -1416,6 +1644,7 @@ export default function App() {
     createInitialWeekDesign(DEFAULT_WEEK_COUNT),
   );
   const [scheduledWorkouts, setScheduledWorkouts] = useState<Record<string, DayWorkout>>({});
+  const [pendingIntervalsDeletes, setPendingIntervalsDeletes] = useState<PendingIntervalsDelete[]>([]);
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('metric');
   const [splitPercent, setSplitPercent] = useState(50);
   const [isDraggingDivider, setIsDraggingDivider] = useState(false);
@@ -1423,6 +1652,12 @@ export default function App() {
   const [activeCalendarDate, setActiveCalendarDate] = useState<Date | null>(null);
   const [calendarDraft, setCalendarDraft] = useState<DayWorkout>({ ...EMPTY_DAY_WORKOUT });
   const [calendarDraftErrors, setCalendarDraftErrors] = useState<string[]>([]);
+  const [isIntervalsModalOpen, setIsIntervalsModalOpen] = useState(false);
+  const [intervalsApiKey, setIntervalsApiKey] = useState('');
+  const [isSyncingIntervals, setIsSyncingIntervals] = useState(false);
+  const [intervalsSyncState, setIntervalsSyncState] = useState<IntervalsSyncState>(
+    createEmptyIntervalsSyncState(),
+  );
   const [isDownloadingPackage, setIsDownloadingPackage] = useState(false);
   const [downloadError, setDownloadError] = useState('');
 
@@ -1438,6 +1673,9 @@ export default function App() {
   const deferredWeeks = useDeferredValue(weeks);
   const parsedWeeks = deferredWeeks.map((week, index) => deriveWeek(week, index, unitSystem));
   const weekColumns = getWeekColumns(parsedWeekCount, weekDesign.raceDate);
+  const visibleCalendarDateKeys = new Set(
+    weekColumns.flatMap((column) => getWeekDates(column.startDate).map((date) => formatDateKey(date))),
+  );
   const monthSegments = buildMonthSegments(weekColumns);
   const phaseSegments = buildPhaseSegments(parsedWeekCount, weekDesign.phaseBlocks);
   const chartWeekLabels = weekColumns.map((column) => String(column.weeksToRace));
@@ -1480,6 +1718,31 @@ export default function App() {
       ...previous,
       raceDate: value,
     }));
+  }
+
+  function getPendingIntervalsDelete(dateKey: string): PendingIntervalsDelete | undefined {
+    return pendingIntervalsDeletes.find((entry) => entry.dateKey === dateKey);
+  }
+
+  function queueIntervalsDelete(dateKey: string, intervalsIcuId: string) {
+    if (!intervalsIcuId) {
+      return;
+    }
+
+    setPendingIntervalsDeletes((previous) => {
+      const next = previous.filter((entry) => entry.dateKey !== dateKey);
+      next.push({
+        dateKey,
+        intervalsIcuId,
+      });
+      return next;
+    });
+  }
+
+  function removePendingIntervalsDelete(dateKey: string) {
+    setPendingIntervalsDeletes((previous) =>
+      previous.filter((entry) => entry.dateKey !== dateKey),
+    );
   }
 
   function handleUnitSystemChange(nextUnitSystem: UnitSystem) {
@@ -1662,9 +1925,15 @@ export default function App() {
 
   function openCalendarDay(date: Date) {
     const dateKey = formatDateKey(date);
+    const queuedDelete = getPendingIntervalsDelete(dateKey);
 
     setActiveCalendarDate(date);
-    setCalendarDraft(scheduledWorkouts[dateKey] ?? { ...EMPTY_DAY_WORKOUT });
+    setCalendarDraft(
+      scheduledWorkouts[dateKey] ?? {
+        ...EMPTY_DAY_WORKOUT,
+        intervalsIcuId: queuedDelete?.intervalsIcuId ?? '',
+      },
+    );
     setCalendarDraftErrors([]);
   }
 
@@ -1698,6 +1967,14 @@ export default function App() {
       return;
     }
 
+    const existingWorkout = scheduledWorkouts[activeCalendarDateKey];
+    const intervalsIcuId =
+      existingWorkout?.intervalsIcuId || calendarDraft.intervalsIcuId || '';
+
+    if (intervalsIcuId) {
+      queueIntervalsDelete(activeCalendarDateKey, intervalsIcuId);
+    }
+
     setScheduledWorkouts((previous) => {
       const next = { ...previous };
       delete next[activeCalendarDateKey];
@@ -1718,6 +1995,11 @@ export default function App() {
       z3Time: isEnduranceWorkoutType(calendarDraft.type) ? calendarDraft.z3Time : '',
       z2Time: isEnduranceWorkoutType(calendarDraft.type) ? calendarDraft.z2Time : '',
       elevation: isEnduranceWorkoutType(calendarDraft.type) ? calendarDraft.elevation : '',
+      intervalsIcuId:
+        scheduledWorkouts[activeCalendarDateKey]?.intervalsIcuId ||
+        calendarDraft.intervalsIcuId ||
+        getPendingIntervalsDelete(activeCalendarDateKey)?.intervalsIcuId ||
+        '',
     };
     const parsedWorkout = deriveDayWorkout(normalizedDraft, unitSystem);
 
@@ -1727,6 +2009,9 @@ export default function App() {
     }
 
     if (!hasDayWorkoutContent(normalizedDraft)) {
+      if (normalizedDraft.intervalsIcuId) {
+        queueIntervalsDelete(activeCalendarDateKey, normalizedDraft.intervalsIcuId);
+      }
       setScheduledWorkouts((previous) => {
         const next = { ...previous };
         delete next[activeCalendarDateKey];
@@ -1740,6 +2025,7 @@ export default function App() {
       ...previous,
       [activeCalendarDateKey]: normalizedDraft,
     }));
+    removePendingIntervalsDelete(activeCalendarDateKey);
     closeCalendarModal();
   }
 
@@ -1800,6 +2086,7 @@ export default function App() {
       weeks,
       weekDesign,
       scheduledWorkouts,
+      pendingIntervalsDeletes,
     };
 
     const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
@@ -1835,6 +2122,7 @@ export default function App() {
       setWeeks(snapshot.weeks);
       setWeekDesign(snapshot.weekDesign);
       setScheduledWorkouts(snapshot.scheduledWorkouts);
+      setPendingIntervalsDeletes(snapshot.pendingIntervalsDeletes);
       setActiveTab(snapshot.activeTab);
       setDownloadError('');
     } catch (error) {
@@ -1844,6 +2132,249 @@ export default function App() {
     } finally {
       event.target.value = '';
     }
+  }
+
+  function openIntervalsModal() {
+    setDownloadError('');
+    setIntervalsSyncState(createEmptyIntervalsSyncState());
+    setIsIntervalsModalOpen(true);
+  }
+
+  function closeIntervalsModal() {
+    if (isSyncingIntervals) {
+      return;
+    }
+
+    setIsIntervalsModalOpen(false);
+    setIntervalsSyncState(createEmptyIntervalsSyncState());
+  }
+
+  async function handlePushToIntervals() {
+    const trimmedApiKey = intervalsApiKey.trim();
+
+    if (!trimmedApiKey || isSyncingIntervals) {
+      return;
+    }
+
+    type IntervalsOperation =
+      | {
+          kind: 'upsert';
+          dateKey: string;
+          mode: 'create' | 'update';
+          workout: DayWorkout;
+        }
+      | {
+          kind: 'delete';
+          dateKey: string;
+          intervalsIcuId: string;
+        };
+
+    const sortedDateKeys = Array.from(visibleCalendarDateKeys).sort();
+    const operations: IntervalsOperation[] = [
+      ...sortedDateKeys.flatMap((dateKey) => {
+        const workout = scheduledWorkouts[dateKey];
+
+        if (!workout || !hasDayWorkoutContent(workout)) {
+          return [];
+        }
+
+        const queuedDelete = getPendingIntervalsDelete(dateKey);
+        const intervalsIcuId = workout.intervalsIcuId || queuedDelete?.intervalsIcuId || '';
+
+        return [
+          {
+            kind: 'upsert' as const,
+            dateKey,
+            mode: (intervalsIcuId ? 'update' : 'create') as 'create' | 'update',
+            workout: {
+              ...workout,
+              intervalsIcuId,
+            },
+          },
+        ];
+      }),
+      ...pendingIntervalsDeletes
+        .filter(
+          (entry) =>
+            visibleCalendarDateKeys.has(entry.dateKey) && !scheduledWorkouts[entry.dateKey],
+        )
+        .sort((left, right) => left.dateKey.localeCompare(right.dateKey))
+        .map((entry) => ({
+          kind: 'delete' as const,
+          dateKey: entry.dateKey,
+          intervalsIcuId: entry.intervalsIcuId,
+        })),
+    ];
+
+    if (operations.length === 0) {
+      setIntervalsSyncState({
+        ...createEmptyIntervalsSyncState(),
+        statusMessage: 'No visible calendar changes to push.',
+      });
+      return;
+    }
+
+    setIsSyncingIntervals(true);
+    setIntervalsSyncState({
+      ...createEmptyIntervalsSyncState(),
+      total: operations.length,
+      statusMessage: 'Syncing with Intervals.icu...',
+    });
+
+    let completed = 0;
+    let created = 0;
+    let updated = 0;
+    let deleted = 0;
+    let failed = 0;
+    const failures: string[] = [];
+    let nextScheduledWorkouts = { ...scheduledWorkouts };
+    let nextPendingIntervalsDeletes = [...pendingIntervalsDeletes];
+    let shouldAbort = false;
+
+    for (const operation of operations) {
+      try {
+        if (operation.kind === 'delete') {
+          try {
+            await callIntervalsApi<unknown>(trimmedApiKey, `/${operation.intervalsIcuId}`, {
+              method: 'DELETE',
+            });
+          } catch (error) {
+            const status = isRecord(error) ? Number(error.status) : NaN;
+
+            if (status !== 404) {
+              throw error;
+            }
+          }
+
+          deleted += 1;
+          nextPendingIntervalsDeletes = nextPendingIntervalsDeletes.filter(
+            (entry) => entry.dateKey !== operation.dateKey,
+          );
+        } else {
+          const validationErrors = deriveDayWorkout(operation.workout, unitSystem).errors;
+
+          if (validationErrors.length > 0) {
+            throw {
+              status: 400,
+              message: validationErrors.join(' '),
+            };
+          }
+
+          const payload = buildIntervalsEventRequestBody(
+            operation.dateKey,
+            operation.workout,
+            unitSystem,
+          );
+          let response: { id?: unknown } | null = null;
+          let savedAs: 'create' | 'update' = operation.mode;
+
+          if (operation.mode === 'update' && operation.workout.intervalsIcuId) {
+            try {
+              response = await callIntervalsApi<{ id?: unknown }>(
+                trimmedApiKey,
+                `/${operation.workout.intervalsIcuId}`,
+                {
+                  method: 'PUT',
+                  body: payload,
+                },
+              );
+            } catch (error) {
+              const status = isRecord(error) ? Number(error.status) : NaN;
+
+              if (status === 404) {
+                response = await callIntervalsApi<{ id?: unknown }>(trimmedApiKey, '', {
+                  method: 'POST',
+                  body: payload,
+                });
+                savedAs = 'create';
+              } else {
+                throw error;
+              }
+            }
+          } else {
+            response = await callIntervalsApi<{ id?: unknown }>(trimmedApiKey, '', {
+              method: 'POST',
+              body: payload,
+            });
+          }
+
+          const nextIntervalsIcuId = sanitizeIntervalsIcuId(response?.id);
+
+          if (!nextIntervalsIcuId) {
+            throw {
+              status: 500,
+              message: 'Intervals.icu did not return an event id.',
+            };
+          }
+
+          nextScheduledWorkouts[operation.dateKey] = {
+            ...operation.workout,
+            intervalsIcuId: nextIntervalsIcuId,
+          };
+          nextPendingIntervalsDeletes = nextPendingIntervalsDeletes.filter(
+            (entry) => entry.dateKey !== operation.dateKey,
+          );
+
+          if (savedAs === 'create') {
+            created += 1;
+          } else {
+            updated += 1;
+          }
+        }
+      } catch (error) {
+        failed += 1;
+        const message = isRecord(error) && typeof error.message === 'string'
+          ? error.message
+          : 'Unknown Intervals.icu error.';
+        const status = isRecord(error) ? Number(error.status) : NaN;
+
+        failures.push(`${operation.dateKey}: ${message}`);
+
+        if (status === 401 || status === 403 || status === 429) {
+          shouldAbort = true;
+        }
+      }
+
+      completed += 1;
+
+      setIntervalsSyncState({
+        completed,
+        total: operations.length,
+        created,
+        updated,
+        deleted,
+        failed,
+        failures: [...failures],
+        statusMessage: shouldAbort
+          ? 'Sync stopped due to an Intervals.icu API error.'
+          : `Synced ${completed} of ${operations.length} calendar changes.`,
+      });
+
+      if (shouldAbort) {
+        break;
+      }
+
+      if (completed < operations.length) {
+        await delay(INTERVALS_REQUEST_DELAY_MS);
+      }
+    }
+
+    setScheduledWorkouts(nextScheduledWorkouts);
+    setPendingIntervalsDeletes(nextPendingIntervalsDeletes);
+    setIsSyncingIntervals(false);
+    setIntervalsSyncState({
+      completed,
+      total: operations.length,
+      created,
+      updated,
+      deleted,
+      failed,
+      failures,
+      statusMessage:
+        failed > 0
+          ? `Intervals.icu sync finished with ${failed} issue${failed === 1 ? '' : 's'}.`
+          : 'Intervals.icu sync complete.',
+    });
   }
 
   async function handleDownloadPackage() {
@@ -2062,20 +2593,27 @@ export default function App() {
                 </div>
               </div>
               <div className="hero-actions">
-                <button className="secondary-button" onClick={handleDownloadJson} type="button">
-                  Download JSON
-                </button>
-                <button className="secondary-button" onClick={handleUploadJsonClick} type="button">
-                  Upload JSON
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={isDownloadingPackage}
-                  onClick={handleDownloadPackage}
-                  type="button"
-                >
-                  {isDownloadingPackage ? 'Preparing Package...' : 'Download Package'}
-                </button>
+                <div className="hero-action-stack">
+                  <button className="secondary-button" onClick={openIntervalsModal} type="button">
+                    Push to Intervals.icu
+                  </button>
+                </div>
+                <div className="hero-action-stack">
+                  <button className="secondary-button" onClick={handleDownloadJson} type="button">
+                    Download JSON
+                  </button>
+                  <button className="secondary-button" onClick={handleUploadJsonClick} type="button">
+                    Upload JSON
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={isDownloadingPackage}
+                    onClick={handleDownloadPackage}
+                    type="button"
+                  >
+                    {isDownloadingPackage ? 'Preparing Package...' : 'Download Package'}
+                  </button>
+                </div>
               </div>
             </div>
             {downloadError ? <p className="helper-text helper-text-error">{downloadError}</p> : null}
@@ -2916,6 +3454,117 @@ export default function App() {
         </div>
       </div>
 
+      {isIntervalsModalOpen ? (
+        <div className="modal-backdrop" onClick={closeIntervalsModal} role="presentation">
+          <div
+            aria-labelledby="intervals-modal-title"
+            aria-modal="true"
+            className="modal-card intervals-modal-card"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="modal-head">
+              <div>
+                <p className="eyebrow">Intervals.icu</p>
+                <h3 id="intervals-modal-title" className="modal-title">
+                  Push Calendar Entries
+                </h3>
+              </div>
+              <button className="modal-close" onClick={closeIntervalsModal} type="button">
+                x
+              </button>
+            </div>
+
+            <label className="field-group">
+              <span className="field-label field-label-inline">
+                API Key
+                <span className="hover-help">
+                  <button
+                    aria-label="How to create an Intervals.icu API key"
+                    className="hover-help-trigger"
+                    type="button"
+                  >
+                    ?
+                  </button>
+                  <span className="hover-help-popover" role="tooltip">
+                    Create an API Key under Settings &gt; Developer Settings.
+                  </span>
+                </span>
+              </span>
+              <input
+                autoComplete="off"
+                className="text-input"
+                onChange={(event) => setIntervalsApiKey(event.target.value)}
+                type="password"
+                value={intervalsApiKey}
+              />
+            </label>
+
+            <p className="helper-text">
+              The API key is kept in memory only for this browser session.
+            </p>
+
+            <section className="intervals-progress-panel">
+              <div
+                aria-hidden="true"
+                className="intervals-progress-bar"
+              >
+                <span
+                  style={{
+                    width:
+                      intervalsSyncState.total > 0
+                        ? `${(intervalsSyncState.completed / intervalsSyncState.total) * 100}%`
+                        : '0%',
+                  }}
+                />
+              </div>
+
+              <div className="intervals-progress-meta">
+                <span>{`${intervalsSyncState.completed} sent`}</span>
+                <span>{`${Math.max(intervalsSyncState.total - intervalsSyncState.completed, 0)} remaining`}</span>
+              </div>
+
+              {intervalsSyncState.statusMessage ? (
+                <p className="helper-text">{intervalsSyncState.statusMessage}</p>
+              ) : null}
+
+              {intervalsSyncState.total > 0 ? (
+                <div className="intervals-progress-summary">
+                  <span>{`Created ${intervalsSyncState.created}`}</span>
+                  <span>{`Updated ${intervalsSyncState.updated}`}</span>
+                  <span>{`Deleted ${intervalsSyncState.deleted}`}</span>
+                  <span>{`Failed ${intervalsSyncState.failed}`}</span>
+                </div>
+              ) : null}
+            </section>
+
+            {intervalsSyncState.failures.length > 0 ? (
+              <ul className="error-list modal-error-list">
+                {intervalsSyncState.failures.map((failure) => (
+                  <li key={failure}>{failure}</li>
+                ))}
+              </ul>
+            ) : null}
+
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={closeIntervalsModal} type="button">
+                {isSyncingIntervals ? 'Syncing...' : 'Close'}
+              </button>
+              <div className="modal-actions-right">
+                <button
+                  className="primary-button"
+                  disabled={!intervalsApiKey.trim() || isSyncingIntervals}
+                  onClick={handlePushToIntervals}
+                  type="button"
+                >
+                  {isSyncingIntervals ? 'Updating...' : 'Update'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {activeCalendarDate ? (
         <div className="modal-backdrop" onClick={closeCalendarModal} role="presentation">
           <div
@@ -2946,6 +3595,16 @@ export default function App() {
                   onChange={(event) => updateCalendarDraft('title', event.target.value)}
                   type="text"
                   value={calendarDraft.title}
+                />
+              </label>
+
+              <label className="field-group">
+                <span className="field-label">Intervals.icu ID</span>
+                <input
+                  className="text-input"
+                  readOnly
+                  type="text"
+                  value={calendarDraft.intervalsIcuId || 'Not pushed yet'}
                 />
               </label>
             </div>

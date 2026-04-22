@@ -68,8 +68,13 @@ describe('planner snapshot restore', () => {
           z2Time: '',
           elevation: '',
           notes: 'Legacy workout',
+          intervalsIcuId: 48566307,
         },
       },
+      pendingIntervalsDeletes: [
+        { dateKey: '2026-10-31', intervalsIcuId: 48566308 },
+        { dateKey: 'invalid', intervalsIcuId: '' },
+      ],
     });
 
     expect(snapshot).not.toBeNull();
@@ -88,8 +93,13 @@ describe('planner snapshot restore', () => {
       z2Time: '',
       elevation: '',
       notes: '',
+      intervalsIcuId: '',
     });
     expect(snapshot?.scheduledWorkouts['2026-10-30']?.type).toBe('road-run');
+    expect(snapshot?.scheduledWorkouts['2026-10-30']?.intervalsIcuId).toBe('48566307');
+    expect(snapshot?.pendingIntervalsDeletes).toEqual([
+      { dateKey: '2026-10-31', intervalsIcuId: '48566308' },
+    ]);
   });
 
   it('uploads a saved json state without crashing and restores calendar values', async () => {
@@ -143,6 +153,7 @@ describe('planner snapshot restore', () => {
               z2Time: '',
               elevation: '',
               notes: '',
+              intervalsIcuId: '',
             },
             '2027-02-09': {
               type: 'trail-run',
@@ -152,8 +163,10 @@ describe('planner snapshot restore', () => {
               z2Time: '45m',
               elevation: '200',
               notes: 'Tempo day',
+              intervalsIcuId: 48566309,
             },
           },
+          pendingIntervalsDeletes: [{ dateKey: '2027-02-10', intervalsIcuId: 48566310 }],
         }),
       ],
       'training-plan-state.json',
@@ -172,6 +185,9 @@ describe('planner snapshot restore', () => {
     expect(screen.getByText('Trail Run')).toBeInTheDocument();
     expect(screen.getByText('Tempo Climb')).toBeInTheDocument();
     expect(screen.getByText('Note')).toBeInTheDocument();
+
+    await user.click(screen.getByText('Tempo Climb'));
+    expect(screen.getByDisplayValue('48566309')).toBeInTheDocument();
   });
 });
 
@@ -246,8 +262,10 @@ describe('planner snapshot download', () => {
               z2Time: '25m',
               elevation: '450',
               notes: 'Steep climb repeats',
+              intervalsIcuId: 48566311,
             },
           },
+          pendingIntervalsDeletes: [{ dateKey: '2027-02-09', intervalsIcuId: 48566312 }],
         }),
       ],
       'training-plan-state.json',
@@ -269,6 +287,9 @@ describe('planner snapshot download', () => {
     expect(json).toContain('"title": "Hill Reps"');
     expect(json).toContain('"type": "trail-run"');
     expect(json).toContain('"notes": "Steep climb repeats"');
+    expect(json).toContain('"intervalsIcuId": "48566311"');
+    expect(json).toContain('"pendingIntervalsDeletes"');
+    expect(json).toContain('"dateKey": "2027-02-09"');
     expect(clickSpy).toHaveBeenCalled();
     clickSpy.mockRestore();
   });

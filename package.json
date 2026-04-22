@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:intervals": "sh -c 'set -a; [ -f ./.env.local ] && . ./.env.local; set +a; vitest run src/intervals.integration.test.ts'"
   },
   "dependencies": {
     "html-to-image": "^1.11.13",

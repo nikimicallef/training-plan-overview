@@ -1,17 +1,19 @@
 # Training Plan Overview
 
-Front-end React + TypeScript application for planning endurance training across three connected views:
-
-- `Volume Design`: weekly volume, zones, elevation, and long-run percentages
-- `Week Design`: event priorities, phase goals, and weekly focus planning
-- `Calendar`: daily workout scheduling against the prescribed weekly plan
-
 ## Requirements
 
 - Node `24+`
 - npm
 
-This project is configured for Node `24+` in `package.json`.
+The project declares `node >=24.0.0` in [package.json](/Users/micalln/workspace/training-plan-overview/package.json).
+
+If this machine resolves an older `node` by default, use the Homebrew Node path:
+
+```bash
+env PATH=/opt/homebrew/bin:$PATH <command>
+```
+
+Examples in this README use plain `npm`, but the `PATH` prefix may be required on this machine.
 
 ## Install
 
@@ -21,10 +23,41 @@ From the project root:
 npm install
 ```
 
-If your default `node` is older on this machine, use the Homebrew Node path:
+If needed:
 
 ```bash
 env PATH=/opt/homebrew/bin:$PATH npm install
+```
+
+## Environment
+
+Committed template:
+
+- [.env.example](/Users/micalln/workspace/training-plan-overview/.env.example)
+
+Local ignored file:
+
+- [.env.local](/Users/micalln/workspace/training-plan-overview/.env.local)
+
+Create the local file from the template:
+
+```bash
+cp .env.example .env.local
+```
+
+Current environment variables:
+
+- `RUN_LIVE_INTERVALS_ICU_TESTS`
+  Controls whether the live Intervals.icu integration suite runs.
+  Default: `false`
+- `INTERVALS_ICU_API_KEY`
+  Real Intervals.icu API key used only by the live integration suite.
+  Default: empty
+
+`.env.local` is sourced automatically by:
+
+```bash
+npm run test:intervals
 ```
 
 ## Run Locally
@@ -35,13 +68,7 @@ Start the Vite dev server:
 npm run dev
 ```
 
-If your shell still resolves to an older Node version, run:
-
-```bash
-env PATH=/opt/homebrew/bin:$PATH npm run dev
-```
-
-Then open the local URL printed by Vite, usually:
+Open the local URL printed by Vite, usually:
 
 ```text
 http://localhost:5173
@@ -55,69 +82,74 @@ Create a production build:
 npm run build
 ```
 
-Or with the Homebrew Node path:
-
-```bash
-env PATH=/opt/homebrew/bin:$PATH npm run build
-```
-
 Preview the production build locally:
 
 ```bash
 npm run preview
 ```
 
-Or:
+## Tests
+
+Run the default test suite:
 
 ```bash
-env PATH=/opt/homebrew/bin:$PATH npm run preview
+npm test -- --run
 ```
 
-## Deploy to GitHub Pages
+or:
 
-This repo is configured to deploy through GitHub Actions.
+```bash
+npm test
+```
 
-What is already set up:
+This runs the standard Vitest suite and skips the live Intervals.icu integration tests unless explicitly enabled.
 
-- Vite uses relative asset paths, so the app can be hosted on a GitHub Pages project site
-- A Pages workflow is included at `.github/workflows/deploy-pages.yml`
-- A `public/.nojekyll` file is included so GitHub Pages serves the static files as-is
+Run the opt-in Intervals.icu integration suite:
 
-What you need to do in GitHub:
+```bash
+npm run test:intervals
+```
 
-1. Push this repository to GitHub.
+To actually execute the live Intervals.icu tests, set the following in `.env.local`:
+
+```env
+RUN_LIVE_INTERVALS_ICU_TESTS=true
+INTERVALS_ICU_API_KEY=your_real_api_key
+```
+
+Those tests:
+
+- create real Intervals.icu events
+- update real Intervals.icu events
+- delete real Intervals.icu events
+- attempt cleanup after the run
+
+Do not enable them in CI unless you intentionally want external API traffic and have provided a valid API key.
+
+## GitHub Pages
+
+The app is configured for GitHub Pages deployment through GitHub Actions.
+
+Relevant files:
+
+- [vite.config.ts](/Users/micalln/workspace/training-plan-overview/vite.config.ts)
+- [.github/workflows/deploy-pages.yml](/Users/micalln/workspace/training-plan-overview/.github/workflows/deploy-pages.yml)
+- [public/.nojekyll](/Users/micalln/workspace/training-plan-overview/public/.nojekyll)
+
+To deploy:
+
+1. Push the repository to GitHub.
 2. Open `Settings -> Pages`.
-3. Under `Build and deployment`, set `Source` to `GitHub Actions`.
-4. Push to `main` or `master`, or run the workflow manually from the `Actions` tab.
+3. Set `Source` to `GitHub Actions`.
+4. Push to the configured branch or run the workflow manually.
 
-The workflow will:
+## Common Commands
 
-- install dependencies with Node `24`
-- run `npm run build`
-- publish the `dist/` folder to GitHub Pages
-
-## Main Features
-
-- Split-screen layout with a resizable divider
-- Left-side live chart with:
-  - stacked weekly bars for `Z1`, `Z2`, `Z3`
-  - long-run line
-  - elevation line
-  - event-grade background bands from Week Design
-- Right-side tabs:
-  - `Volume Design`
-  - `Week Design`
-  - `Calendar`
-- Export tools:
-  - `Download Package`: zip with chart image, week-design image, and calendar Excel file
-  - `Download JSON`: save the full planner state
-  - `Upload JSON`: restore a previously saved planner state
-
-## Notes
-
-- Week countdown is zero-based relative to race week:
-  - race week = `0`
-  - previous week = `1`
-- Calendar weeks are Monday to Sunday
-- The prescribed weekly values in `Calendar` are always pulled from `Volume Design`
-- Scheduled values in `Calendar` come from the daily workouts entered in that tab
+```bash
+npm install
+npm run dev
+npm run build
+npm run preview
+npm test -- --run
+npm run test:intervals
+```
