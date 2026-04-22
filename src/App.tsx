@@ -177,7 +177,7 @@ const DEFAULT_FOCUS_ROWS: FocusRow[] = [
   { id: 'cross-training', label: 'Cross Training', abbreviation: 'XT', isCustom: false },
   { id: 'strength', label: 'Strength', abbreviation: 'ST', isCustom: false },
   { id: 'taper', label: 'Taper', abbreviation: 'TA', isCustom: false },
-  { id: 'testing', label: 'Testing', abbreviation: 'TA', isCustom: false },
+  { id: 'testing', label: 'Testing', abbreviation: 'TE', isCustom: false },
 ];
 
 const COLORS = {
@@ -463,6 +463,16 @@ function formatShortDate(date: Date): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+function formatRaceDateExportDisplay(value: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return '';
+  }
+
+  return trimmed.replaceAll('-', '/');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1407,6 +1417,9 @@ function Chart({
     x: getX(index),
     y: getRightY(week.elevationMeters),
   }));
+  const chartExportTextColor = '#ffffff';
+  const chartExportAxisColor = '#ffffff';
+  const chartExportGridColor = '#ffffff';
 
   return (
     <div className="chart-frame">
@@ -1454,21 +1467,30 @@ function Chart({
             <g key={`time-${tick}`}>
               <line
                 className="chart-grid"
+                stroke={chartExportGridColor}
                 x1={margin.left}
                 x2={width - margin.right}
                 y1={y}
                 y2={y}
               />
-              <text className="axis-label" x={margin.left - 12} y={y + 4}>
+              <text className="axis-label" fill={chartExportTextColor} x={margin.left - 12} y={y + 4}>
                 {Math.round(tick)}
               </text>
             </g>
           );
         })}
 
-        <line className="chart-axis" x1={margin.left} x2={margin.left} y1={margin.top} y2={height - margin.bottom} />
         <line
           className="chart-axis"
+          stroke={chartExportAxisColor}
+          x1={margin.left}
+          x2={margin.left}
+          y1={margin.top}
+          y2={height - margin.bottom}
+        />
+        <line
+          className="chart-axis"
+          stroke={chartExportAxisColor}
           x1={width - margin.right}
           x2={width - margin.right}
           y1={margin.top}
@@ -1476,6 +1498,7 @@ function Chart({
         />
         <line
           className="chart-axis"
+          stroke={chartExportAxisColor}
           x1={margin.left}
           x2={width - margin.right}
           y1={height - margin.bottom}
@@ -1486,7 +1509,13 @@ function Chart({
           const y = getRightY(tick);
 
           return (
-            <text key={`elevation-${tick}`} className="axis-label" x={width - margin.right + 12} y={y + 4}>
+            <text
+              key={`elevation-${tick}`}
+              className="axis-label"
+              fill={chartExportTextColor}
+              x={width - margin.right + 12}
+              y={y + 4}
+            >
               {Math.round(unitSystem === 'imperial' ? metersToFeet(tick) : tick)}
             </text>
           );
@@ -1529,13 +1558,14 @@ function Chart({
                 </>
               ) : null}
               {index % labelStep === 0 || index === data.length - 1 ? (
-                <text className="week-label" x={x} y={height - margin.bottom + 26}>
+                <text className="week-label" fill={chartExportTextColor} x={x} y={height - margin.bottom + 26}>
                   {weekLabels[index] ?? ''}
                 </text>
               ) : null}
               {(focusAbbreviations[index] ?? []).map((abbreviation, abbreviationIndex) => (
                 <text
                   className="chart-focus-label"
+                  fill={chartExportTextColor}
                   key={`${week.week}-focus-${abbreviation}-${abbreviationIndex + 1}`}
                   x={x}
                   y={height - margin.bottom + 42 + abbreviationIndex * 13}
@@ -1585,17 +1615,19 @@ function Chart({
 
         <text
           className="axis-title"
+          fill={chartExportTextColor}
           transform={`translate(24 ${margin.top + plotHeight / 2}) rotate(-90)`}
         >
           Time (minutes)
         </text>
         <text
           className="axis-title"
+          fill={chartExportTextColor}
           transform={`translate(${width - 20} ${margin.top + plotHeight / 2}) rotate(90)`}
         >
           {`Elevation (${getElevationUnitLabel(unitSystem)})`}
         </text>
-        <text className="axis-title" x={width / 2} y={height - 16}>
+        <text className="axis-title" fill={chartExportTextColor} x={width / 2} y={height - 16}>
           Week
         </text>
       </svg>
@@ -1624,7 +1656,7 @@ function LegendSwatch({
           <circle cx="9" cy="-3" fill={color} r="3.5" />
         </>
       )}
-      <text className="legend-label" x="26" y="0">
+      <text className="legend-label" fill="#ffffff" x="26" y="0">
         {label}
       </text>
     </g>
@@ -2399,11 +2431,13 @@ export default function App() {
         backgroundColor: '#275374',
         cacheBust: true,
         pixelRatio: 2,
+        skipFonts: true,
       });
       const weekDesignBlob = await htmlToImage.toBlob(weekDesignExportRef.current, {
         backgroundColor: '#275374',
         cacheBust: true,
         pixelRatio: 2,
+        skipFonts: true,
       });
 
       if (!chartBlob || !weekDesignBlob) {
@@ -2564,7 +2598,7 @@ export default function App() {
                     <a href="https://bornonthetrail.substack.com/" rel="noreferrer" target="_blank">
                       Born on the Trail
                     </a>{' '}
-                    for practical training and racing ideas for trail and ultra marathon races.
+                    for science-informed articles on training and racing trail and ultra marathons.
                   </p>
                   <p>
                     Prefer listening on the run? Tune in on{' '}
@@ -3367,7 +3401,11 @@ export default function App() {
         <div className="export-card" ref={weekDesignExportRef}>
           <div className="export-card-head">
             <h2>Week Focus</h2>
-            <span>{weekDesign.raceDate ? `Race Date ${weekDesign.raceDate}` : 'Race Date not set'}</span>
+            <span>
+              {weekDesign.raceDate
+                ? `Race Date ${formatRaceDateExportDisplay(weekDesign.raceDate)}`
+                : 'Race Date not set'}
+            </span>
           </div>
 
           {parsedWeekCount === 0 ? (
