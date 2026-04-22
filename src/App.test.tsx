@@ -54,16 +54,26 @@ describe('planner snapshot restore', () => {
       scheduledWorkouts: {
         '2026-10-29': {
           recovery: true,
+          title: null,
           totalTime: null,
           z3Time: null,
           z2Time: null,
           elevation: null,
           notes: null,
         },
+        '2026-10-30': {
+          recovery: false,
+          totalTime: '1h',
+          z3Time: '',
+          z2Time: '',
+          elevation: '',
+          notes: 'Legacy workout',
+        },
       },
     });
 
     expect(snapshot).not.toBeNull();
+    expect(snapshot?.unitSystem).toBe('metric');
     expect(snapshot?.weeksInput).toBe('3');
     expect(snapshot?.weeks).toHaveLength(3);
     expect(snapshot?.weekDesign.events).toHaveLength(3);
@@ -71,13 +81,15 @@ describe('planner snapshot restore', () => {
     expect(snapshot?.weekDesign.focusRows[0].abbreviation).toBe('R');
     expect(snapshot?.weekDesign.phaseBlocks[0].abbreviation).toBe('BA');
     expect(snapshot?.scheduledWorkouts['2026-10-29']).toEqual({
-      recovery: true,
+      title: '',
+      type: 'rest',
       totalTime: '',
       z3Time: '',
       z2Time: '',
       elevation: '',
       notes: '',
     });
+    expect(snapshot?.scheduledWorkouts['2026-10-30']?.type).toBe('road-run');
   });
 
   it('uploads a saved json state without crashing and restores calendar values', async () => {
@@ -95,6 +107,7 @@ describe('planner snapshot restore', () => {
         JSON.stringify({
           version: 1,
           activeTab: 'calendar',
+          unitSystem: 'imperial',
           weeksInput: '2',
           weeks: [
             {
@@ -123,7 +136,8 @@ describe('planner snapshot restore', () => {
           },
           scheduledWorkouts: {
             '2027-02-08': {
-              recovery: true,
+              type: 'rest',
+              title: 'Off',
               totalTime: '',
               z3Time: '',
               z2Time: '',
@@ -131,7 +145,8 @@ describe('planner snapshot restore', () => {
               notes: '',
             },
             '2027-02-09': {
-              recovery: false,
+              type: 'trail-run',
+              title: 'Tempo Climb',
               totalTime: '2h',
               z3Time: '30m',
               z2Time: '45m',
@@ -148,13 +163,14 @@ describe('planner snapshot restore', () => {
     await user.upload(fileInput as HTMLInputElement, file);
 
     await waitFor(() => {
-      expect(
-        screen.getByRole('heading', { name: 'Schedule daily sessions against each race week' }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Imperial' })).toHaveClass(
+        'unit-switch-button-active',
+      );
     });
 
-    expect(screen.getAllByText('Recovery').length).toBeGreaterThan(0);
-    expect(screen.getByText('2h')).toBeInTheDocument();
+    expect(screen.getByText('Off')).toBeInTheDocument();
+    expect(screen.getByText('Trail Run')).toBeInTheDocument();
+    expect(screen.getByText('Tempo Climb')).toBeInTheDocument();
     expect(screen.getByText('Note')).toBeInTheDocument();
   });
 });
@@ -168,16 +184,92 @@ describe('planner snapshot download', () => {
 
     render(<App />);
 
+    await user.click(screen.getByRole('button', { name: 'Imperial' }));
+
     await user.click(screen.getByRole('button', { name: 'Download JSON' }));
 
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
     const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0];
     expect(blob).toBeInstanceOf(Blob);
     const json = await readBlobText(blob as Blob);
+    expect(json).toContain('"unitSystem": "imperial"');
     expect(json).toContain('"weeksInput": "6"');
     expect(json).toContain('"abbreviation": "R"');
+    expect(json).toContain('"scheduledWorkouts": {}');
     expect(clickSpy).toHaveBeenCalledTimes(1);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:planner-state');
+    clickSpy.mockRestore();
+  });
+
+  it('preserves typed calendar workouts when downloading json after upload', async () => {
+    const user = userEvent.setup();
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Upload JSON' }));
+
+    const fileInput = document.querySelector('input[type="file"]');
+    expect(fileInput).not.toBeNull();
+
+    const file = new File(
+      [
+        JSON.stringify({
+          version: 1,
+          activeTab: 'calendar',
+          unitSystem: 'metric',
+          weeksInput: '1',
+          weeks: [
+            {
+              totalTime: '5h',
+              z3Time: '45m',
+              z2Time: '1h 30m',
+              elevation: '800',
+              longRunPercent: '30',
+            },
+          ],
+          weekDesign: {
+            raceDate: '2027-02-14',
+            events: [null],
+            focusRows: [{ id: 'z1-focus', label: 'Z1', abbreviation: 'Z1', isCustom: false }],
+            focusSelections: { 'z1-focus': [true] },
+            phaseBlocks: [],
+          },
+          scheduledWorkouts: {
+            '2027-02-08': {
+              type: 'trail-run',
+              title: 'Hill Reps',
+              totalTime: '1h 20m',
+              z3Time: '20m',
+              z2Time: '25m',
+              elevation: '450',
+              notes: 'Steep climb repeats',
+            },
+          },
+        }),
+      ],
+      'training-plan-state.json',
+      { type: 'application/json' },
+    );
+
+    await user.upload(fileInput as HTMLInputElement, file);
+    await waitFor(() => expect(screen.getByText('Hill Reps')).toBeInTheDocument());
+
+    vi.mocked(URL.createObjectURL).mockClear();
+    vi.mocked(URL.revokeObjectURL).mockClear();
+
+    await user.click(screen.getByRole('button', { name: 'Download JSON' }));
+
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0];
+    const json = await readBlobText(blob as Blob);
+
+    expect(json).toContain('"title": "Hill Reps"');
+    expect(json).toContain('"type": "trail-run"');
+    expect(json).toContain('"notes": "Steep climb repeats"');
+    expect(clickSpy).toHaveBeenCalled();
     clickSpy.mockRestore();
   });
 });

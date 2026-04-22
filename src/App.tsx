@@ -65,8 +65,19 @@ type WeekDesignState = {
   phaseBlocks: PhaseBlock[];
 };
 
+type WorkoutType =
+  | ''
+  | 'road-run'
+  | 'trail-run'
+  | 'cycling'
+  | 'hiking'
+  | 'strength'
+  | 'other'
+  | 'rest';
+
 type DayWorkout = {
-  recovery: boolean;
+  title: string;
+  type: WorkoutType;
   totalTime: string;
   z3Time: string;
   z2Time: string;
@@ -92,11 +103,14 @@ type WeekScheduleSummary = {
   workoutCount: number;
 };
 
+type UnitSystem = 'metric' | 'imperial';
+
 type PlannerTab = 'volume' | 'week' | 'calendar';
 
 type PlannerSnapshot = {
   version: number;
   activeTab: PlannerTab;
+  unitSystem: UnitSystem;
   weeksInput: string;
   weeks: WeekFormState[];
   weekDesign: WeekDesignState;
@@ -121,7 +135,8 @@ const EMPTY_EVENT: WeekEvent = {
 };
 
 const EMPTY_DAY_WORKOUT: DayWorkout = {
-  recovery: false,
+  title: '',
+  type: '',
   totalTime: '',
   z3Time: '',
   z2Time: '',
@@ -132,6 +147,7 @@ const EMPTY_DAY_WORKOUT: DayWorkout = {
 const DEFAULT_WEEK_COUNT = 6;
 const LEFT_AXIS_TICKS = 5;
 const RIGHT_AXIS_TICKS = 5;
+const FEET_PER_METER = 3.28084;
 const DEFAULT_FOCUS_ROWS: FocusRow[] = [
   { id: 'recovery', label: 'Recovery', abbreviation: 'R', isCustom: false },
   { id: 'z1-focus', label: 'Z1', abbreviation: 'Z1', isCustom: false },
@@ -149,13 +165,23 @@ const COLORS = {
   z3: '#ffb3ad',
   longRun: '#2c9d62',
   elevation: '#ba36f5',
-  eventGradeA: 'rgba(255, 140, 140, 0.2)',
-  eventGradeB: 'rgba(255, 227, 138, 0.24)',
-  eventGradeC: 'rgba(126, 214, 153, 0.22)',
+  eventGradeA: 'rgba(255, 92, 92, 0.24)',
+  eventGradeB: 'rgba(255, 210, 72, 0.26)',
+  eventGradeC: 'rgba(92, 201, 112, 0.24)',
   grid: '#d8dccf',
   axis: '#526052',
   text: '#223021',
 };
+
+const WORKOUT_TYPE_OPTIONS: Array<{ value: Exclude<WorkoutType, ''>; label: string }> = [
+  { value: 'road-run', label: 'Road Run' },
+  { value: 'trail-run', label: 'Trail Run' },
+  { value: 'cycling', label: 'Cycling' },
+  { value: 'hiking', label: 'Hiking' },
+  { value: 'strength', label: 'Strength' },
+  { value: 'other', label: 'Other' },
+  { value: 'rest', label: 'Rest' },
+];
 
 function getEventGradeBandColor(grade: EventGrade): string | null {
   if (grade === 'A') {
@@ -283,8 +309,36 @@ function roundToOneDecimal(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+function metersToFeet(value: number): number {
+  return value * FEET_PER_METER;
+}
+
+function feetToMeters(value: number): number {
+  return value / FEET_PER_METER;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function sanitizeNumericTextInput(value: string): string {
+  let seenDecimal = false;
+
+  return value
+    .split('')
+    .filter((character) => {
+      if (/\d/.test(character)) {
+        return true;
+      }
+
+      if (character === '.' && !seenDecimal) {
+        seenDecimal = true;
+        return true;
+      }
+
+      return false;
+    })
+    .join('');
 }
 
 function formatMinutes(totalMinutes: number): string {
@@ -306,8 +360,37 @@ function formatMinutes(totalMinutes: number): string {
   return `${hours}h ${minutes}m`;
 }
 
-function formatMeters(value: number): string {
-  return `${Math.round(value)} m`;
+function formatElevation(valueMeters: number, unitSystem: UnitSystem): string {
+  const displayValue =
+    unitSystem === 'imperial' ? Math.round(metersToFeet(valueMeters)) : Math.round(valueMeters);
+  const unitLabel = unitSystem === 'imperial' ? 'ft' : 'm';
+
+  return `${displayValue} ${unitLabel}`;
+}
+
+function getElevationUnitLabel(unitSystem: UnitSystem): string {
+  return unitSystem === 'imperial' ? 'ft' : 'm';
+}
+
+function convertElevationInputValue(
+  value: string,
+  fromUnitSystem: UnitSystem,
+  toUnitSystem: UnitSystem,
+): string {
+  if (fromUnitSystem === toUnitSystem || value.trim() === '') {
+    return value;
+  }
+
+  const parsedValue = parseNonNegativeNumber(value);
+
+  if (parsedValue === null) {
+    return value;
+  }
+
+  const metersValue = fromUnitSystem === 'imperial' ? feetToMeters(parsedValue) : parsedValue;
+  const nextValue = toUnitSystem === 'imperial' ? metersToFeet(metersValue) : metersValue;
+
+  return String(Math.round(nextValue));
 }
 
 function formatPercent(value: number): string {
@@ -358,6 +441,34 @@ function sanitizeString(value: unknown): string {
 
 function sanitizeBoolean(value: unknown): boolean {
   return value === true;
+}
+
+function sanitizeUnitSystem(value: unknown): UnitSystem {
+  return value === 'imperial' ? 'imperial' : 'metric';
+}
+
+function sanitizeWorkoutType(value: unknown): WorkoutType {
+  return WORKOUT_TYPE_OPTIONS.some((option) => option.value === value) ? (value as WorkoutType) : '';
+}
+
+function sanitizeWorkoutTitle(value: unknown): string {
+  return sanitizeString(value).trim().slice(0, 30);
+}
+
+function getWorkoutTypeLabel(type: WorkoutType): string {
+  return WORKOUT_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? '';
+}
+
+function isEnduranceWorkoutType(type: WorkoutType): boolean {
+  return type === 'road-run' || type === 'trail-run' || type === 'cycling' || type === 'hiking';
+}
+
+function isTimeOnlyWorkoutType(type: WorkoutType): boolean {
+  return type === 'strength' || type === 'other';
+}
+
+function isRestWorkoutType(type: WorkoutType): boolean {
+  return type === 'rest';
 }
 
 function sanitizeWeekForm(value: unknown): WeekFormState {
@@ -425,13 +536,32 @@ function sanitizePhaseBlock(
 }
 
 function sanitizeDayWorkout(value: unknown): DayWorkout {
+  const recovery = isRecord(value) ? sanitizeBoolean(value.recovery) : false;
+  const type = isRecord(value) ? sanitizeWorkoutType(value.type) : '';
+  const totalTime = isRecord(value) ? sanitizeString(value.totalTime) : '';
+  const z3Time = isRecord(value) ? sanitizeString(value.z3Time) : '';
+  const z2Time = isRecord(value) ? sanitizeString(value.z2Time) : '';
+  const elevation = isRecord(value) ? sanitizeString(value.elevation) : '';
+  const notes = isRecord(value) ? sanitizeString(value.notes) : '';
+  const title = isRecord(value) ? sanitizeWorkoutTitle(value.title) : '';
+  const inferredLegacyType: WorkoutType =
+    type ||
+    (recovery
+      ? 'rest'
+      : totalTime.trim() || z3Time.trim() || z2Time.trim() || elevation.trim()
+        ? 'road-run'
+        : title.trim() || notes.trim()
+          ? 'other'
+          : '');
+
   return {
-    recovery: isRecord(value) ? sanitizeBoolean(value.recovery) : false,
-    totalTime: isRecord(value) ? sanitizeString(value.totalTime) : '',
-    z3Time: isRecord(value) ? sanitizeString(value.z3Time) : '',
-    z2Time: isRecord(value) ? sanitizeString(value.z2Time) : '',
-    elevation: isRecord(value) ? sanitizeString(value.elevation) : '',
-    notes: isRecord(value) ? sanitizeString(value.notes) : '',
+    title,
+    type: inferredLegacyType,
+    totalTime,
+    z3Time,
+    z2Time,
+    elevation,
+    notes,
   };
 }
 
@@ -520,6 +650,7 @@ function sanitizePlannerSnapshot(value: unknown): PlannerSnapshot | null {
       activeTab === 'volume' || activeTab === 'week' || activeTab === 'calendar'
         ? activeTab
         : 'week',
+    unitSystem: sanitizeUnitSystem(value.unitSystem),
     weeksInput: normalizedWeeksInput,
     weeks: resizeWeeks(weekCount, uploadedWeeks),
     weekDesign: sanitizeWeekDesignState(value.weekDesign, weekCount),
@@ -588,11 +719,9 @@ function getWeekDates(startDate: Date | null): Date[] {
 }
 
 function hasDayWorkoutContent(workout: DayWorkout): boolean {
-  if (workout.recovery) {
-    return true;
-  }
-
   return (
+    workout.title.trim() !== '' ||
+    workout.type !== '' ||
     workout.totalTime.trim() !== '' ||
     workout.z3Time.trim() !== '' ||
     workout.z2Time.trim() !== '' ||
@@ -601,8 +730,19 @@ function hasDayWorkoutContent(workout: DayWorkout): boolean {
   );
 }
 
-function deriveDayWorkout(workout: DayWorkout): ParsedDayWorkout {
-  if (workout.recovery) {
+function deriveDayWorkout(workout: DayWorkout, unitSystem: UnitSystem): ParsedDayWorkout {
+  if (!workout.type) {
+    return {
+      totalMinutes: 0,
+      z1Minutes: 0,
+      z2Minutes: 0,
+      z3Minutes: 0,
+      elevationMeters: 0,
+      errors: hasDayWorkoutContent(workout) ? ['Select a workout type.'] : [],
+    };
+  }
+
+  if (isRestWorkoutType(workout.type)) {
     return {
       totalMinutes: 0,
       z1Minutes: 0,
@@ -615,32 +755,35 @@ function deriveDayWorkout(workout: DayWorkout): ParsedDayWorkout {
 
   const errors: string[] = [];
   const totalMinutes = parseTimeInput(workout.totalTime);
-  const z3Minutes = parseTimeInput(workout.z3Time);
-  const z2Minutes = parseTimeInput(workout.z2Time);
-  const elevationMeters = parseNonNegativeNumber(workout.elevation);
+  const z3Minutes = isEnduranceWorkoutType(workout.type) ? parseTimeInput(workout.z3Time) : 0;
+  const z2Minutes = isEnduranceWorkoutType(workout.type) ? parseTimeInput(workout.z2Time) : 0;
+  const elevationValue = isEnduranceWorkoutType(workout.type)
+    ? parseNonNegativeNumber(workout.elevation)
+    : 0;
 
   if (totalMinutes === null) {
     errors.push('Time must use the format Xh Ym.');
   }
 
-  if (z3Minutes === null) {
+  if (isEnduranceWorkoutType(workout.type) && z3Minutes === null) {
     errors.push('Time in Z3 must use the format Xh Ym.');
   }
 
-  if (z2Minutes === null) {
+  if (isEnduranceWorkoutType(workout.type) && z2Minutes === null) {
     errors.push('Time in Z2 must use the format Xh Ym.');
   }
 
-  if (elevationMeters === null) {
+  if (isEnduranceWorkoutType(workout.type) && elevationValue === null) {
     errors.push('Elevation must be a non-negative number.');
   }
 
   const safeTotal = totalMinutes ?? 0;
   const safeZ3 = z3Minutes ?? 0;
   const safeZ2 = z2Minutes ?? 0;
-  const safeElevation = elevationMeters ?? 0;
+  const safeElevationValue = elevationValue ?? 0;
+  const safeElevation = unitSystem === 'imperial' ? feetToMeters(safeElevationValue) : safeElevationValue;
 
-  if (safeZ2 + safeZ3 > safeTotal) {
+  if (isEnduranceWorkoutType(workout.type) && safeZ2 + safeZ3 > safeTotal) {
     errors.push('Time in Z2 + Z3 cannot exceed total time.');
   }
 
@@ -659,6 +802,7 @@ function deriveDayWorkout(workout: DayWorkout): ParsedDayWorkout {
 function summarizeWeekSchedule(
   weekDates: Date[],
   workoutsByDate: Record<string, DayWorkout>,
+  unitSystem: UnitSystem,
 ): WeekScheduleSummary {
   return weekDates.reduce(
     (summary, date) => {
@@ -668,7 +812,7 @@ function summarizeWeekSchedule(
         return summary;
       }
 
-      const parsedWorkout = deriveDayWorkout(workout);
+      const parsedWorkout = deriveDayWorkout(workout, unitSystem);
 
       return {
         totalMinutes: summary.totalMinutes + parsedWorkout.totalMinutes,
@@ -676,7 +820,7 @@ function summarizeWeekSchedule(
         z2Minutes: summary.z2Minutes + parsedWorkout.z2Minutes,
         z3Minutes: summary.z3Minutes + parsedWorkout.z3Minutes,
         elevationMeters: summary.elevationMeters + parsedWorkout.elevationMeters,
-        workoutCount: summary.workoutCount + 1,
+        workoutCount: summary.workoutCount + (isRestWorkoutType(workout.type) ? 0 : 1),
       };
     },
     {
@@ -695,6 +839,7 @@ function buildSummaryLines(
     WeekScheduleSummary | ParsedWeek,
     'totalMinutes' | 'z1Minutes' | 'z2Minutes' | 'z3Minutes' | 'elevationMeters'
   >,
+  unitSystem: UnitSystem,
   extraLine?: string,
 ): string[] {
   const lines = [
@@ -702,7 +847,7 @@ function buildSummaryLines(
     `Z1 ${formatMinutes(summary.z1Minutes)}`,
     `Z2 ${formatMinutes(summary.z2Minutes)}`,
     `Z3 ${formatMinutes(summary.z3Minutes)}`,
-    `Elev ${formatMeters(summary.elevationMeters)}`,
+    `Elev ${formatElevation(summary.elevationMeters, unitSystem)}`,
   ];
 
   if (extraLine) {
@@ -712,7 +857,16 @@ function buildSummaryLines(
   return lines;
 }
 
-function buildCalendarDayCellText(date: Date, workout?: DayWorkout): string {
+function buildDayWorkoutMetricLine(parsedWorkout: ParsedDayWorkout): string {
+  return [
+    formatMinutes(parsedWorkout.totalMinutes),
+    formatMinutes(parsedWorkout.z3Minutes),
+    formatMinutes(parsedWorkout.z2Minutes),
+    formatMinutes(parsedWorkout.z1Minutes),
+  ].join(' / ');
+}
+
+function buildCalendarDayCellText(date: Date, workout: DayWorkout | undefined, unitSystem: UnitSystem): string {
   const lines = [formatShortDate(date)];
 
   if (!workout || !hasDayWorkoutContent(workout)) {
@@ -720,15 +874,21 @@ function buildCalendarDayCellText(date: Date, workout?: DayWorkout): string {
     return lines.join('\n');
   }
 
-  if (workout.recovery) {
-    lines.push('Recovery');
-  } else {
-    const parsedWorkout = deriveDayWorkout(workout);
-    lines.push(`Total ${formatMinutes(parsedWorkout.totalMinutes)}`);
-    lines.push(`Z1 ${formatMinutes(parsedWorkout.z1Minutes)}`);
-    lines.push(`Z2 ${formatMinutes(parsedWorkout.z2Minutes)}`);
-    lines.push(`Z3 ${formatMinutes(parsedWorkout.z3Minutes)}`);
-    lines.push(`Elev ${formatMeters(parsedWorkout.elevationMeters)}`);
+  if (workout.title.trim()) {
+    lines.push(workout.title.trim());
+  }
+
+  const typeLabel = getWorkoutTypeLabel(workout.type);
+  if (typeLabel) {
+    lines.push(typeLabel);
+  }
+
+  if (!isRestWorkoutType(workout.type)) {
+    const parsedWorkout = deriveDayWorkout(workout, unitSystem);
+    const showElevation = isEnduranceWorkoutType(workout.type) && workout.elevation.trim() !== '';
+
+    lines.push(buildDayWorkoutMetricLine(parsedWorkout));
+    lines.push(showElevation ? formatElevation(parsedWorkout.elevationMeters, unitSystem) : '-');
   }
 
   if (workout.notes.trim()) {
@@ -872,13 +1032,13 @@ function buildPolyline(points: Array<{ x: number; y: number }>): string {
   return points.map((point) => `${point.x},${point.y}`).join(' ');
 }
 
-function deriveWeek(week: WeekFormState, index: number): ParsedWeek {
+function deriveWeek(week: WeekFormState, index: number, unitSystem: UnitSystem): ParsedWeek {
   const errors: string[] = [];
 
   const totalMinutes = parseTimeInput(week.totalTime);
   const z3Minutes = parseTimeInput(week.z3Time);
   const z2Minutes = parseTimeInput(week.z2Time);
-  const elevationMeters = parseNonNegativeNumber(week.elevation);
+  const elevationValue = parseNonNegativeNumber(week.elevation);
   const longRunPercent = parseNonNegativeNumber(week.longRunPercent);
 
   if (totalMinutes === null) {
@@ -893,7 +1053,7 @@ function deriveWeek(week: WeekFormState, index: number): ParsedWeek {
     errors.push('Z2 time must use the format Xh Ym.');
   }
 
-  if (elevationMeters === null) {
+  if (elevationValue === null) {
     errors.push('Elevation must be a non-negative number.');
   }
 
@@ -904,7 +1064,8 @@ function deriveWeek(week: WeekFormState, index: number): ParsedWeek {
   const safeTotal = totalMinutes ?? 0;
   const safeZ3 = z3Minutes ?? 0;
   const safeZ2 = z2Minutes ?? 0;
-  const safeElevation = elevationMeters ?? 0;
+  const safeElevationValue = elevationValue ?? 0;
+  const safeElevation = unitSystem === 'imperial' ? feetToMeters(safeElevationValue) : safeElevationValue;
   const safeLongRunPercent = longRunPercent ?? 0;
 
   if (safeZ2 + safeZ3 > safeTotal) {
@@ -928,7 +1089,7 @@ function deriveWeek(week: WeekFormState, index: number): ParsedWeek {
 }
 
 function getPrescribedWeek(parsedWeeks: ParsedWeek[], weekIndex: number): ParsedWeek {
-  return parsedWeeks[weekIndex] ?? deriveWeek({ ...EMPTY_WEEK }, weekIndex);
+  return parsedWeeks[weekIndex] ?? deriveWeek({ ...EMPTY_WEEK }, weekIndex, 'metric');
 }
 
 function getRoundedRectPath(
@@ -969,11 +1130,13 @@ function Chart({
   eventGrades,
   weekLabels,
   focusAbbreviations,
+  unitSystem,
 }: {
   data: ParsedWeek[];
   eventGrades: EventGrade[];
   weekLabels: string[];
   focusAbbreviations: string[][];
+  unitSystem: UnitSystem;
 }) {
   if (data.length === 0) {
     return (
@@ -1096,7 +1259,7 @@ function Chart({
 
           return (
             <text key={`elevation-${tick}`} className="axis-label" x={width - margin.right + 12} y={y + 4}>
-              {Math.round(tick)}
+              {Math.round(unitSystem === 'imperial' ? metersToFeet(tick) : tick)}
             </text>
           );
         })}
@@ -1106,38 +1269,37 @@ function Chart({
           const barX = x - barWidth / 2;
           const segmentRadius = 10;
           const z3Top = getLeftY(week.totalMinutes);
+          const totalHeight = week.totalMinutes === 0 ? 0 : (week.totalMinutes / timeAxisMax) * plotHeight;
           const z3Height = week.totalMinutes === 0 ? 0 : (week.z3Minutes / timeAxisMax) * plotHeight;
           const z2Top = getLeftY(week.z1Minutes + week.z2Minutes);
           const z2Height = week.totalMinutes === 0 ? 0 : (week.z2Minutes / timeAxisMax) * plotHeight;
           const z1Top = getLeftY(week.z1Minutes);
           const z1Height = week.totalMinutes === 0 ? 0 : (week.z1Minutes / timeAxisMax) * plotHeight;
-          const showZ1 = z1Height > 0;
-          const showZ2 = z2Height > 0;
-          const showZ3 = z3Height > 0;
+          const clipPathId = `week-stack-clip-${week.week}`;
 
           return (
             <g key={week.week}>
-              <path
-                d={getRoundedRectPath(barX, z1Top, barWidth, Math.max(z1Height, 0), segmentRadius, {
-                  roundTop: showZ1 && !showZ2 && !showZ3,
-                  roundBottom: showZ1,
-                })}
-                fill={COLORS.z1}
-              />
-              <path
-                d={getRoundedRectPath(barX, z2Top, barWidth, Math.max(z2Height, 0), segmentRadius, {
-                  roundTop: showZ2 && !showZ3,
-                  roundBottom: showZ2 && !showZ1,
-                })}
-                fill={COLORS.z2}
-              />
-              <path
-                d={getRoundedRectPath(barX, z3Top, barWidth, Math.max(z3Height, 0), segmentRadius, {
-                  roundTop: showZ3,
-                  roundBottom: showZ3 && !showZ1 && !showZ2,
-                })}
-                fill={COLORS.z3}
-              />
+              {totalHeight > 0 ? (
+                <>
+                  <clipPath id={clipPathId}>
+                    <path
+                      d={getRoundedRectPath(
+                        barX,
+                        z3Top,
+                        barWidth,
+                        Math.max(totalHeight, 0),
+                        segmentRadius,
+                        { roundTop: true, roundBottom: true },
+                      )}
+                    />
+                  </clipPath>
+                  <g clipPath={`url(#${clipPathId})`}>
+                    <rect fill={COLORS.z1} height={Math.max(z1Height, 0)} width={barWidth} x={barX} y={z1Top} />
+                    <rect fill={COLORS.z2} height={Math.max(z2Height, 0)} width={barWidth} x={barX} y={z2Top} />
+                    <rect fill={COLORS.z3} height={Math.max(z3Height, 0)} width={barWidth} x={barX} y={z3Top} />
+                  </g>
+                </>
+              ) : null}
               {index % labelStep === 0 || index === data.length - 1 ? (
                 <text className="week-label" x={x} y={height - margin.bottom + 26}>
                   {weekLabels[index] ?? ''}
@@ -1203,7 +1365,7 @@ function Chart({
           className="axis-title"
           transform={`translate(${width - 20} ${margin.top + plotHeight / 2}) rotate(90)`}
         >
-          Elevation (m)
+          {`Elevation (${getElevationUnitLabel(unitSystem)})`}
         </text>
         <text className="axis-title" x={width / 2} y={height - 16}>
           Week
@@ -1254,6 +1416,7 @@ export default function App() {
     createInitialWeekDesign(DEFAULT_WEEK_COUNT),
   );
   const [scheduledWorkouts, setScheduledWorkouts] = useState<Record<string, DayWorkout>>({});
+  const [unitSystem, setUnitSystem] = useState<UnitSystem>('metric');
   const [splitPercent, setSplitPercent] = useState(50);
   const [isDraggingDivider, setIsDraggingDivider] = useState(false);
   const [activeTab, setActiveTab] = useState<PlannerTab>('week');
@@ -1273,7 +1436,7 @@ export default function App() {
   }, [parsedWeekCount]);
 
   const deferredWeeks = useDeferredValue(weeks);
-  const parsedWeeks = deferredWeeks.map(deriveWeek);
+  const parsedWeeks = deferredWeeks.map((week, index) => deriveWeek(week, index, unitSystem));
   const weekColumns = getWeekColumns(parsedWeekCount, weekDesign.raceDate);
   const monthSegments = buildMonthSegments(weekColumns);
   const phaseSegments = buildPhaseSegments(parsedWeekCount, weekDesign.phaseBlocks);
@@ -1295,9 +1458,14 @@ export default function App() {
   const activeCalendarTitle = activeCalendarDate ? formatCalendarDate(activeCalendarDate) : '';
 
   function updateWeek(index: number, field: keyof WeekFormState, value: string) {
+    const nextValue =
+      field === 'elevation' || field === 'longRunPercent'
+        ? sanitizeNumericTextInput(value)
+        : value;
+
     setWeeks((previous) =>
       previous.map((week, weekIndex) =>
-        weekIndex === index ? { ...week, [field]: value } : week,
+        weekIndex === index ? { ...week, [field]: nextValue } : week,
       ),
     );
   }
@@ -1312,6 +1480,35 @@ export default function App() {
       ...previous,
       raceDate: value,
     }));
+  }
+
+  function handleUnitSystemChange(nextUnitSystem: UnitSystem) {
+    if (nextUnitSystem === unitSystem) {
+      return;
+    }
+
+    setWeeks((previous) =>
+      previous.map((week) => ({
+        ...week,
+        elevation: convertElevationInputValue(week.elevation, unitSystem, nextUnitSystem),
+      })),
+    );
+    setScheduledWorkouts((previous) =>
+      Object.fromEntries(
+        Object.entries(previous).map(([dateKey, workout]) => [
+          dateKey,
+          {
+            ...workout,
+            elevation: convertElevationInputValue(workout.elevation, unitSystem, nextUnitSystem),
+          },
+        ]),
+      ),
+    );
+    setCalendarDraft((previous) => ({
+      ...previous,
+      elevation: convertElevationInputValue(previous.elevation, unitSystem, nextUnitSystem),
+    }));
+    setUnitSystem(nextUnitSystem);
   }
 
   function updateWeekEvent(index: number, field: keyof WeekEvent, value: string) {
@@ -1480,18 +1677,18 @@ export default function App() {
   function updateCalendarDraft(field: keyof DayWorkout, value: string) {
     setCalendarDraft((previous) => ({
       ...previous,
-      [field]: value,
+      [field]: field === 'title' ? value.slice(0, 30) : value,
     }));
   }
 
-  function toggleCalendarRecovery(checked: boolean) {
+  function updateCalendarWorkoutType(type: WorkoutType) {
     setCalendarDraft((previous) => ({
       ...previous,
-      recovery: checked,
-      totalTime: checked ? '' : previous.totalTime,
-      z3Time: checked ? '' : previous.z3Time,
-      z2Time: checked ? '' : previous.z2Time,
-      elevation: checked ? '' : previous.elevation,
+      type,
+      totalTime: isRestWorkoutType(type) ? '' : previous.totalTime,
+      z3Time: isEnduranceWorkoutType(type) ? previous.z3Time : '',
+      z2Time: isEnduranceWorkoutType(type) ? previous.z2Time : '',
+      elevation: isEnduranceWorkoutType(type) ? previous.elevation : '',
     }));
     setCalendarDraftErrors([]);
   }
@@ -1514,14 +1711,22 @@ export default function App() {
       return;
     }
 
-    const parsedWorkout = deriveDayWorkout(calendarDraft);
+    const normalizedDraft: DayWorkout = {
+      ...calendarDraft,
+      title: sanitizeWorkoutTitle(calendarDraft.title),
+      type: calendarDraft.type,
+      z3Time: isEnduranceWorkoutType(calendarDraft.type) ? calendarDraft.z3Time : '',
+      z2Time: isEnduranceWorkoutType(calendarDraft.type) ? calendarDraft.z2Time : '',
+      elevation: isEnduranceWorkoutType(calendarDraft.type) ? calendarDraft.elevation : '',
+    };
+    const parsedWorkout = deriveDayWorkout(normalizedDraft, unitSystem);
 
     if (parsedWorkout.errors.length > 0) {
       setCalendarDraftErrors(parsedWorkout.errors);
       return;
     }
 
-    if (!hasDayWorkoutContent(calendarDraft)) {
+    if (!hasDayWorkoutContent(normalizedDraft)) {
       setScheduledWorkouts((previous) => {
         const next = { ...previous };
         delete next[activeCalendarDateKey];
@@ -1533,7 +1738,7 @@ export default function App() {
 
     setScheduledWorkouts((previous) => ({
       ...previous,
-      [activeCalendarDateKey]: { ...calendarDraft },
+      [activeCalendarDateKey]: normalizedDraft,
     }));
     closeCalendarModal();
   }
@@ -1542,6 +1747,8 @@ export default function App() {
     return [
       [
         'Week',
+        'Prescribed',
+        'Scheduled',
         'Monday',
         'Tuesday',
         'Wednesday',
@@ -1549,33 +1756,34 @@ export default function App() {
         'Friday',
         'Saturday',
         'Sunday',
-        'Scheduled',
-        'Prescribed',
       ],
       ...weekColumns.map((column, weekIndex) => {
         const weekDates = getWeekDates(column.startDate);
-        const scheduledSummary = summarizeWeekSchedule(weekDates, scheduledWorkouts);
+        const scheduledSummary = summarizeWeekSchedule(weekDates, scheduledWorkouts, unitSystem);
         const prescribedWeek = getPrescribedWeek(parsedWeeks, weekIndex);
+        const focusSummary = chartFocusAbbreviations[weekIndex]?.join(' ') || '-';
 
         return [
-          `Week ${weekIndex + 1}\n${column.weeksToRace} w to race${
+          `Wk. ${column.weeksToRace}${
             weekDates.length > 0 ? `\n${formatDateRange(weekDates[0], weekDates[6])}` : ''
           }`,
-          ...weekDates.map((date) =>
-            buildCalendarDayCellText(date, scheduledWorkouts[formatDateKey(date)]),
-          ),
-          buildSummaryLines(
-            scheduledSummary,
-            `Sessions ${scheduledSummary.workoutCount}`,
-          ).join('\n'),
           buildSummaryLines(
             prescribedWeek,
+            unitSystem,
             `Long ${formatPercent(
               prescribedWeek.totalMinutes > 0
                 ? (prescribedWeek.longRunMinutes / prescribedWeek.totalMinutes) * 100
                 : 0,
-            )}`,
+            )}\nFocus ${focusSummary}`,
           ).join('\n'),
+          buildSummaryLines(
+            scheduledSummary,
+            unitSystem,
+            `Sessions ${scheduledSummary.workoutCount}`,
+          ).join('\n'),
+          ...weekDates.map((date) =>
+            buildCalendarDayCellText(date, scheduledWorkouts[formatDateKey(date)], unitSystem),
+          ),
         ];
       }),
     ];
@@ -1587,6 +1795,7 @@ export default function App() {
     const snapshot: PlannerSnapshot = {
       version: 1,
       activeTab,
+      unitSystem,
       weeksInput,
       weeks,
       weekDesign,
@@ -1621,6 +1830,7 @@ export default function App() {
       }
 
       closeCalendarModal();
+      setUnitSystem(snapshot.unitSystem);
       setWeeksInput(snapshot.weeksInput);
       setWeeks(snapshot.weeks);
       setWeekDesign(snapshot.weekDesign);
@@ -1859,7 +2069,7 @@ export default function App() {
                   Upload JSON
                 </button>
                 <button
-                  className="primary-button"
+                  className="secondary-button"
                   disabled={isDownloadingPackage}
                   onClick={handleDownloadPackage}
                   type="button"
@@ -1898,13 +2108,14 @@ export default function App() {
               </article>
               <article className="chart-summary-card">
                 <span>Total Elevation</span>
-                <strong>{formatMeters(totalElevationMeters)}</strong>
+                <strong>{formatElevation(totalElevationMeters, unitSystem)}</strong>
               </article>
             </div>
             <Chart
               data={parsedWeeks}
               eventGrades={weekDesign.events.map((event) => event.eventGrade)}
               focusAbbreviations={chartFocusAbbreviations}
+              unitSystem={unitSystem}
               weekLabels={chartWeekLabels}
             />
           </section>
@@ -1928,71 +2139,66 @@ export default function App() {
 
           <section className="panel form-pane">
           <div className="form-top">
-            <div className="tab-bar" role="tablist" aria-label="Planning modes">
-              <button
-                aria-selected={activeTab === 'week'}
-                className={`tab-button ${activeTab === 'week' ? 'tab-button-active' : ''}`}
-                onClick={() => setActiveTab('week')}
-                role="tab"
-                type="button"
-              >
-                Week Focus
-              </button>
-              <button
-                aria-selected={activeTab === 'volume'}
-                className={`tab-button ${activeTab === 'volume' ? 'tab-button-active' : ''}`}
-                onClick={() => setActiveTab('volume')}
-                role="tab"
-                type="button"
-              >
-                Volume Design
-              </button>
-              <button
-                aria-selected={activeTab === 'calendar'}
-                className={`tab-button ${activeTab === 'calendar' ? 'tab-button-active' : ''}`}
-                onClick={() => setActiveTab('calendar')}
-                role="tab"
-                type="button"
-              >
-                Calendar
-              </button>
+            <div className="tab-toolbar">
+              <div className="tab-bar" role="tablist" aria-label="Planning modes">
+                <button
+                  aria-selected={activeTab === 'week'}
+                  className={`tab-button ${activeTab === 'week' ? 'tab-button-active' : ''}`}
+                  onClick={() => setActiveTab('week')}
+                  role="tab"
+                  type="button"
+                >
+                  Week Focus
+                </button>
+                <button
+                  aria-selected={activeTab === 'volume'}
+                  className={`tab-button ${activeTab === 'volume' ? 'tab-button-active' : ''}`}
+                  onClick={() => setActiveTab('volume')}
+                  role="tab"
+                  type="button"
+                >
+                  Volume Design
+                </button>
+                <button
+                  aria-selected={activeTab === 'calendar'}
+                  className={`tab-button ${activeTab === 'calendar' ? 'tab-button-active' : ''}`}
+                  onClick={() => setActiveTab('calendar')}
+                  role="tab"
+                  type="button"
+                >
+                  Calendar
+                </button>
+              </div>
+
+              <div aria-label="Elevation units" className="unit-switch" role="group">
+                <button
+                  className={`unit-switch-button ${
+                    unitSystem === 'metric' ? 'unit-switch-button-active' : ''
+                  }`}
+                  onClick={() => handleUnitSystemChange('metric')}
+                  type="button"
+                >
+                  Metric
+                </button>
+                <button
+                  className={`unit-switch-button ${
+                    unitSystem === 'imperial' ? 'unit-switch-button-active' : ''
+                  }`}
+                  onClick={() => handleUnitSystemChange('imperial')}
+                  type="button"
+                >
+                  Imperial
+                </button>
+              </div>
             </div>
 
-            {activeTab === 'volume' ? (
-              <>
-                <div className="section-head section-head-form">
-                  <div>
-                    <p className="eyebrow">Volume Design</p>
-                    <h2>Fill the weekly volume targets that drive the chart</h2>
-                  </div>
-                  <p className="section-note">
-                    Week count now comes from Week Focus. Blank values render as zero. If Z2 + Z3
-                    is greater than total time, that week is flagged and removed from the stacked
-                    bar until corrected.
-                  </p>
-                </div>
-
-                <div className="planner-toolbar">
-                  <div className="planner-chip">
-                    <span>Weeks in plan</span>
-                    <strong>{parsedWeekCount}</strong>
-                  </div>
-                  <div className="planner-chip">
-                    <span>Race date</span>
-                    <strong>{weekDesign.raceDate || 'Set in Week Focus'}</strong>
-                  </div>
-                </div>
-                <p className="helper-text">
-                  Enter the weekly targets here after setting the plan length in Week Focus.
-                </p>
-              </>
-            ) : activeTab === 'week' ? (
+            {activeTab === 'week' ? (
               <>
                 <div className="planner-toolbar">
-                  <label className="field-group" htmlFor={weeksInputId}>
-                    <span className="field-label">Weeks</span>
+                  <label className="planner-chip planner-chip-input" htmlFor={weeksInputId}>
+                    <span>Weeks</span>
                     <input
-                      className="text-input weeks-input"
+                      className="planner-chip-control weeks-input"
                       id={weeksInputId}
                       inputMode="numeric"
                       max={52}
@@ -2002,10 +2208,10 @@ export default function App() {
                       value={weeksInput}
                     />
                   </label>
-                  <label className="field-group" htmlFor="race-date">
-                    <span className="field-label">Race Date</span>
+                  <label className="planner-chip planner-chip-input" htmlFor="race-date">
+                    <span>Race Date</span>
                     <input
-                      className="text-input"
+                      className="planner-chip-control"
                       id="race-date"
                       onChange={(event) => updateRaceDate(event.target.value)}
                       type="date"
@@ -2019,20 +2225,9 @@ export default function App() {
               </>
             ) : (
               <>
-                <div className="section-head section-head-form">
-                  <div>
-                    <p className="eyebrow">Calendar</p>
-                    <h2>Schedule daily sessions against each race week</h2>
-                  </div>
-                  <p className="section-note">
-                    Click any date to log a workout. Scheduled totals roll up from the daily
-                    entries, while Prescribed stays fixed from Volume Design.
-                  </p>
-                </div>
-
                 <div className="planner-toolbar">
                   <div className="planner-chip">
-                    <span>Weeks in plan</span>
+                    <span>Weeks</span>
                     <strong>{parsedWeekCount}</strong>
                   </div>
                   <div className="planner-chip">
@@ -2040,10 +2235,6 @@ export default function App() {
                     <strong>{weekDesign.raceDate || 'Set in Week Focus'}</strong>
                   </div>
                 </div>
-                <p className="helper-text">
-                  Calendar weeks are Monday to Sunday. Use Week Focus to change the race date
-                  driving this timeline.
-                </p>
               </>
             )}
           </div>
@@ -2056,16 +2247,18 @@ export default function App() {
             ) : (
               <div className="weeks-grid">
                 {weeks.map((week, index) => {
-                  const parsedWeek = deriveWeek(week, index);
+                  const parsedWeek = deriveWeek(week, index, unitSystem);
 
                   return (
                     <article className="week-card" key={`week-${index + 1}`}>
                       <div className="week-card-header">
                         <div>
-                          <p className="week-kicker">Week {index + 1}</p>
-                          <h3>{formatMinutes(parsedWeek.totalMinutes)}</h3>
+                          <p className="week-kicker">{`Wk. ${weekColumns[index]?.weeksToRace ?? index}`}</p>
                         </div>
-                        <span className="week-badge">Z1: {formatMinutes(parsedWeek.z1Minutes)}</span>
+                        <div className="week-badge-row">
+                          <span className="week-badge">Z1 {formatMinutes(parsedWeek.z1Minutes)}</span>
+                          <span className="week-badge">LR {formatMinutes(parsedWeek.longRunMinutes)}</span>
+                        </div>
                       </div>
 
                       <div className="week-fields">
@@ -2100,17 +2293,6 @@ export default function App() {
                         </label>
 
                         <label className="field-group">
-                          <span className="field-label">Elevation (m)</span>
-                          <input
-                            className="text-input"
-                            min={0}
-                            onChange={(event) => updateWeek(index, 'elevation', event.target.value)}
-                            type="number"
-                            value={week.elevation}
-                          />
-                        </label>
-
-                        <label className="field-group">
                           <span className="field-label">Long Run (%)</span>
                           <input
                             className="text-input"
@@ -2123,11 +2305,17 @@ export default function App() {
                             value={week.longRunPercent}
                           />
                         </label>
-                      </div>
 
-                      <div className="week-metrics">
-                        <span>Long run: {formatMinutes(parsedWeek.longRunMinutes)}</span>
-                        <span>Elevation: {formatMeters(parsedWeek.elevationMeters)}</span>
+                        <label className="field-group">
+                          <span className="field-label">{`Elevation (${getElevationUnitLabel(unitSystem)})`}</span>
+                          <input
+                            className="text-input"
+                            min={0}
+                            onChange={(event) => updateWeek(index, 'elevation', event.target.value)}
+                            type="number"
+                            value={week.elevation}
+                          />
+                        </label>
                       </div>
 
                       {parsedWeek.errors.length > 0 ? (
@@ -2153,17 +2341,16 @@ export default function App() {
                   <section className="planner-panel">
                     <div className="planner-panel-head">
                       <p className="eyebrow">Phase Goals</p>
-                      <button className="secondary-button" onClick={addPhaseBlock} type="button">
+                      <button
+                        className="secondary-button planner-panel-button"
+                        onClick={addPhaseBlock}
+                        type="button"
+                      >
                         Add Phase Goal
                       </button>
                     </div>
 
-                    {weekDesign.phaseBlocks.length === 0 ? (
-                      <div className="planner-empty-line">
-                        No phase blocks yet. Add one to paint the Phase Goal row across multiple
-                        weeks.
-                      </div>
-                    ) : (
+                    {weekDesign.phaseBlocks.length === 0 ? null : (
                       <div className="phase-block-list">
                         {weekDesign.phaseBlocks.map((block) => (
                           <article className="phase-block-card" key={block.id}>
@@ -2230,7 +2417,11 @@ export default function App() {
                   <section className="planner-panel">
                     <div className="planner-panel-head">
                       <p className="eyebrow">Focus Rows</p>
-                      <button className="secondary-button" onClick={addCustomFocusRow} type="button">
+                      <button
+                        className="secondary-button planner-panel-button"
+                        onClick={addCustomFocusRow}
+                        type="button"
+                      >
                         Add Focus Row
                       </button>
                     </div>
@@ -2426,42 +2617,137 @@ export default function App() {
                       <th className="calendar-sticky-column calendar-week-head" scope="col">
                         Week
                       </th>
+                      <th
+                        className="calendar-sticky-column calendar-head-cell calendar-summary-head calendar-prescribed-head"
+                        scope="col"
+                      >
+                        Prescribed
+                      </th>
+                      <th
+                        className="calendar-sticky-column calendar-head-cell calendar-summary-head calendar-scheduled-head"
+                        scope="col"
+                      >
+                        Scheduled
+                      </th>
                       {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayLabel) => (
                         <th className="calendar-head-cell" key={dayLabel} scope="col">
                           {dayLabel}
                         </th>
                       ))}
-                      <th className="calendar-head-cell calendar-summary-head" scope="col">
-                        Scheduled
-                      </th>
-                      <th className="calendar-head-cell calendar-summary-head" scope="col">
-                        Prescribed
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {weekColumns.map((column, weekIndex) => {
                       const weekDates = getWeekDates(column.startDate);
-                      const scheduledSummary = summarizeWeekSchedule(weekDates, scheduledWorkouts);
+                      const scheduledSummary = summarizeWeekSchedule(weekDates, scheduledWorkouts, unitSystem);
                       const prescribedWeek = getPrescribedWeek(parsedWeeks, weekIndex);
+                      const focusSummary = chartFocusAbbreviations[weekIndex]?.join(' ') || '-';
 
                       return (
                         <tr key={`calendar-week-${weekIndex + 1}`}>
                           <th className="calendar-sticky-column calendar-week-label" scope="row">
                             <div className="calendar-week-meta">
-                              <strong>Week {weekIndex + 1}</strong>
-                              <span>{column.weeksToRace} w to race</span>
+                              <strong>{`Wk. ${column.weeksToRace}`}</strong>
+                              <span>{`${column.weeksToRace} w to race`}</span>
                               {weekDates.length > 0 ? (
                                 <span>{formatDateRange(weekDates[0], weekDates[6])}</span>
                               ) : null}
                             </div>
                           </th>
 
+                          <td className="calendar-sticky-column calendar-summary-cell calendar-prescribed-cell">
+                            <div className="calendar-summary-grid">
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">Total</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {formatMinutes(prescribedWeek.totalMinutes)}
+                                </span>
+                              </span>
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">Z3</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {formatMinutes(prescribedWeek.z3Minutes)}
+                                </span>{' '}
+                                <span className="calendar-summary-label">Z2</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {formatMinutes(prescribedWeek.z2Minutes)}
+                                </span>{' '}
+                                <span className="calendar-summary-label">Z1</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {formatMinutes(prescribedWeek.z1Minutes)}
+                                </span>
+                              </span>
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">Elev</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {formatElevation(prescribedWeek.elevationMeters, unitSystem)}
+                                </span>
+                              </span>
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">Long</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {formatPercent(
+                                    prescribedWeek.totalMinutes > 0
+                                      ? (prescribedWeek.longRunMinutes / prescribedWeek.totalMinutes) *
+                                          100
+                                      : 0,
+                                  )}
+                                </span>
+                              </span>
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">Focus:</span>{' '}
+                                <span className="calendar-summary-value">{focusSummary}</span>
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="calendar-sticky-column calendar-summary-cell calendar-scheduled-cell">
+                            <div className="calendar-summary-grid">
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">Total</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {formatMinutes(scheduledSummary.totalMinutes)}
+                                </span>
+                              </span>
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">Z3</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {formatMinutes(scheduledSummary.z3Minutes)}
+                                </span>{' '}
+                                <span className="calendar-summary-label">Z2</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {formatMinutes(scheduledSummary.z2Minutes)}
+                                </span>{' '}
+                                <span className="calendar-summary-label">Z1</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {formatMinutes(scheduledSummary.z1Minutes)}
+                                </span>
+                              </span>
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">Elev</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {formatElevation(scheduledSummary.elevationMeters, unitSystem)}
+                                </span>
+                              </span>
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">Sessions</span>{' '}
+                                <span className="calendar-summary-value">
+                                  {scheduledSummary.workoutCount}
+                                </span>
+                              </span>
+                            </div>
+                          </td>
+
                           {weekDates.map((date) => {
                             const dateKey = formatDateKey(date);
                             const workout = scheduledWorkouts[dateKey];
-                            const parsedWorkout = workout ? deriveDayWorkout(workout) : null;
+                            const parsedWorkout = workout ? deriveDayWorkout(workout, unitSystem) : null;
                             const hasWorkout = workout ? hasDayWorkoutContent(workout) : false;
+                            const workoutTypeLabel = workout ? getWorkoutTypeLabel(workout.type) : '';
+                            const showWorkoutElevation =
+                              !!workout &&
+                              isEnduranceWorkoutType(workout.type) &&
+                              workout.elevation.trim() !== '';
 
                             return (
                               <td className="calendar-day-cell" key={dateKey}>
@@ -2472,26 +2758,32 @@ export default function App() {
                                   onClick={() => openCalendarDay(date)}
                                   type="button"
                                 >
-                                  <span className="calendar-day-date">{date.getDate()}</span>
-                                  <span className="calendar-day-month">
-                                    {date.toLocaleDateString(undefined, { month: 'short' })}
+                                  <span className="calendar-day-heading">
+                                    <span className="calendar-day-date">{date.getDate()}</span>
+                                    <span className="calendar-day-month">
+                                      {date.toLocaleDateString(undefined, { month: 'short' })}
+                                    </span>
                                   </span>
                                   {hasWorkout && parsedWorkout ? (
                                     <>
-                                      {workout?.recovery ? (
-                                        <span className="calendar-day-recovery">Recovery</span>
-                                      ) : (
+                                      {workout?.title.trim() ? (
+                                        <span className="calendar-day-title">{workout.title.trim()}</span>
+                                      ) : null}
+                                      {workoutTypeLabel ? (
+                                        <span className="calendar-day-type">{workoutTypeLabel}</span>
+                                      ) : null}
+                                      {!isRestWorkoutType(workout?.type ?? '') ? (
                                         <>
                                           <span className="calendar-day-metric">
-                                            {formatMinutes(parsedWorkout.totalMinutes)}
+                                            {buildDayWorkoutMetricLine(parsedWorkout)}
                                           </span>
-                                          {parsedWorkout.elevationMeters > 0 ? (
-                                            <span className="calendar-day-submetric">
-                                              {formatMeters(parsedWorkout.elevationMeters)}
-                                            </span>
-                                          ) : null}
+                                          <span className="calendar-day-submetric">
+                                            {showWorkoutElevation
+                                              ? formatElevation(parsedWorkout.elevationMeters, unitSystem)
+                                              : '-'}
+                                          </span>
                                         </>
-                                      )}
+                                      ) : null}
                                       {workout?.notes.trim() ? (
                                         <span className="calendar-day-note">Note</span>
                                       ) : null}
@@ -2504,34 +2796,6 @@ export default function App() {
                             );
                           })}
 
-                          <td className="calendar-summary-cell">
-                            <div className="calendar-summary-grid">
-                              <span>Total {formatMinutes(scheduledSummary.totalMinutes)}</span>
-                              <span>Z1 {formatMinutes(scheduledSummary.z1Minutes)}</span>
-                              <span>Z2 {formatMinutes(scheduledSummary.z2Minutes)}</span>
-                              <span>Z3 {formatMinutes(scheduledSummary.z3Minutes)}</span>
-                              <span>Elev {formatMeters(scheduledSummary.elevationMeters)}</span>
-                              <span>Sessions {scheduledSummary.workoutCount}</span>
-                            </div>
-                          </td>
-
-                          <td className="calendar-summary-cell calendar-prescribed-cell">
-                            <div className="calendar-summary-grid">
-                              <span>Total {formatMinutes(prescribedWeek.totalMinutes)}</span>
-                              <span>Z1 {formatMinutes(prescribedWeek.z1Minutes)}</span>
-                              <span>Z2 {formatMinutes(prescribedWeek.z2Minutes)}</span>
-                              <span>Z3 {formatMinutes(prescribedWeek.z3Minutes)}</span>
-                              <span>Elev {formatMeters(prescribedWeek.elevationMeters)}</span>
-                              <span>
-                                Long {formatPercent(
-                                  prescribedWeek.totalMinutes > 0
-                                    ? (prescribedWeek.longRunMinutes / prescribedWeek.totalMinutes) *
-                                        100
-                                    : 0,
-                                )}
-                              </span>
-                            </div>
-                          </td>
                         </tr>
                       );
                     })}
@@ -2674,61 +2938,92 @@ export default function App() {
             </div>
 
             <div className="modal-grid">
-              <label className="checkbox-row">
+              <label className="field-group">
+                <span className="field-label">Title</span>
                 <input
-                  checked={calendarDraft.recovery}
-                  onChange={(event) => toggleCalendarRecovery(event.target.checked)}
-                  type="checkbox"
+                  className="text-input"
+                  maxLength={30}
+                  onChange={(event) => updateCalendarDraft('title', event.target.value)}
+                  type="text"
+                  value={calendarDraft.title}
                 />
-                <span>Recovery</span>
               </label>
             </div>
 
-            <div className="modal-grid">
-              <label className="field-group">
-                <span className="field-label">Time</span>
-                <input
-                  className="text-input"
-                  disabled={calendarDraft.recovery}
-                  onChange={(event) => updateCalendarDraft('totalTime', event.target.value)}
-                  type="text"
-                  value={calendarDraft.totalTime}
-                />
-              </label>
+            <fieldset className="modal-type-group">
+              <legend className="field-label modal-type-legend">Type</legend>
+              <div className="modal-type-options">
+                {WORKOUT_TYPE_OPTIONS.map((option) => (
+                  <label className="radio-pill" key={option.value}>
+                    <input
+                      checked={calendarDraft.type === option.value}
+                      name="calendar-workout-type"
+                      onChange={() => updateCalendarWorkoutType(option.value)}
+                      type="radio"
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
 
-              <label className="field-group">
-                <span className="field-label">Time in Z3</span>
-                <input
-                  className="text-input"
-                  disabled={calendarDraft.recovery}
-                  onChange={(event) => updateCalendarDraft('z3Time', event.target.value)}
-                  type="text"
-                  value={calendarDraft.z3Time}
-                />
-              </label>
+            {isEnduranceWorkoutType(calendarDraft.type) ? (
+              <div className="modal-grid">
+                <label className="field-group">
+                  <span className="field-label">Time</span>
+                  <input
+                    className="text-input"
+                    onChange={(event) => updateCalendarDraft('totalTime', event.target.value)}
+                    type="text"
+                    value={calendarDraft.totalTime}
+                  />
+                </label>
 
-              <label className="field-group">
-                <span className="field-label">Time in Z2</span>
-                <input
-                  className="text-input"
-                  disabled={calendarDraft.recovery}
-                  onChange={(event) => updateCalendarDraft('z2Time', event.target.value)}
-                  type="text"
-                  value={calendarDraft.z2Time}
-                />
-              </label>
+                <label className="field-group">
+                  <span className="field-label">Time in Z3</span>
+                  <input
+                    className="text-input"
+                    onChange={(event) => updateCalendarDraft('z3Time', event.target.value)}
+                    type="text"
+                    value={calendarDraft.z3Time}
+                  />
+                </label>
 
-              <label className="field-group">
-                <span className="field-label">Elevation (m)</span>
-                <input
-                  className="text-input"
-                  disabled={calendarDraft.recovery}
-                  onChange={(event) => updateCalendarDraft('elevation', event.target.value)}
-                  type="number"
-                  value={calendarDraft.elevation}
-                />
-              </label>
-            </div>
+                <label className="field-group">
+                  <span className="field-label">Time in Z2</span>
+                  <input
+                    className="text-input"
+                    onChange={(event) => updateCalendarDraft('z2Time', event.target.value)}
+                    type="text"
+                    value={calendarDraft.z2Time}
+                  />
+                </label>
+
+                <label className="field-group">
+                  <span className="field-label">{`Elevation (${getElevationUnitLabel(unitSystem)})`}</span>
+                  <input
+                    className="text-input"
+                    onChange={(event) => updateCalendarDraft('elevation', event.target.value)}
+                    type="number"
+                    value={calendarDraft.elevation}
+                  />
+                </label>
+              </div>
+            ) : null}
+
+            {isTimeOnlyWorkoutType(calendarDraft.type) ? (
+              <div className="modal-grid modal-grid-single">
+                <label className="field-group">
+                  <span className="field-label">Time</span>
+                  <input
+                    className="text-input"
+                    onChange={(event) => updateCalendarDraft('totalTime', event.target.value)}
+                    type="text"
+                    value={calendarDraft.totalTime}
+                  />
+                </label>
+              </div>
+            ) : null}
 
             <label className="field-group">
               <span className="field-label">Notes</span>
