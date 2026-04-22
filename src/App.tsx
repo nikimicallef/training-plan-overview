@@ -169,6 +169,12 @@ const RIGHT_AXIS_TICKS = 5;
 const FEET_PER_METER = 3.28084;
 const INTERVALS_BASE_URL = 'https://intervals.icu/api/v1/athlete/0/events';
 const INTERVALS_REQUEST_DELAY_MS = 120;
+const BORN_ON_THE_TRAIL_REFERRAL_QUERY =
+  'utm_source=training-plan-overview&utm_medium=referral&utm_campaign=app';
+const BORN_ON_THE_TRAIL_URL =
+  `https://www.bornonthetrail.com/?${BORN_ON_THE_TRAIL_REFERRAL_QUERY}`;
+const BORN_ON_THE_TRAIL_COACHING_URL =
+  `https://bornonthetrail.substack.com/p/coaching?${BORN_ON_THE_TRAIL_REFERRAL_QUERY}`;
 const DEFAULT_FOCUS_ROWS: FocusRow[] = [
   { id: 'recovery', label: 'Recovery', abbreviation: 'R', isCustom: false },
   { id: 'z1-focus', label: 'Z1', abbreviation: 'Z1', isCustom: false },
@@ -2588,14 +2594,14 @@ export default function App() {
                       Niki Micallef
                     </a>{' '}
                     from{' '}
-                    <a href="https://www.bornonthetrail.com/" rel="noreferrer" target="_blank">
+                    <a href={BORN_ON_THE_TRAIL_URL} rel="noopener" target="_blank">
                       Born on the Trail
                     </a>
                     .
                   </p>
                   <p>
                     Visit{' '}
-                    <a href="https://www.bornonthetrail.com/" rel="noreferrer" target="_blank">
+                    <a href={BORN_ON_THE_TRAIL_URL} rel="noopener" target="_blank">
                       Born on the Trail
                     </a>{' '}
                     for science-informed articles on training and racing trail and ultra marathons.
@@ -2626,8 +2632,8 @@ export default function App() {
                   <p>
                     Need coaching or direct training guidance?{' '}
                     <a
-                      href="https://bornonthetrail.substack.com/p/coaching"
-                      rel="noreferrer"
+                      href={BORN_ON_THE_TRAIL_COACHING_URL}
+                      rel="noopener"
                       target="_blank"
                     >
                       Hire me as a coach
@@ -3652,8 +3658,8 @@ export default function App() {
                   </a>{' '}
                   from{' '}
                   <a
-                    href="https://www.bornonthetrail.com/"
-                    rel="noreferrer"
+                    href={BORN_ON_THE_TRAIL_URL}
+                    rel="noopener"
                     target="_blank"
                   >
                     Born on the Trail
