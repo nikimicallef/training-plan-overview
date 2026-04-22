@@ -1,3 +1,43 @@
+const {
+  htmlToImageToBlobMock,
+  jsZipFileMock,
+  jsZipGenerateAsyncMock,
+  xlsxBookNewMock,
+  xlsxAoaToSheetMock,
+  xlsxBookAppendSheetMock,
+  xlsxWriteMock,
+} = vi.hoisted(() => ({
+  htmlToImageToBlobMock: vi.fn(async () => ({
+    arrayBuffer: async () => new ArrayBuffer(8),
+  })),
+  jsZipFileMock: vi.fn(),
+  jsZipGenerateAsyncMock: vi.fn(async () => new Blob(['zip'], { type: 'application/zip' })),
+  xlsxBookNewMock: vi.fn(() => ({ sheets: [] })),
+  xlsxAoaToSheetMock: vi.fn(() => ({})),
+  xlsxBookAppendSheetMock: vi.fn(),
+  xlsxWriteMock: vi.fn(() => new Uint8Array([1, 2, 3])),
+}));
+
+vi.mock('html-to-image', () => ({
+  toBlob: htmlToImageToBlobMock,
+}));
+
+vi.mock('jszip', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    file: jsZipFileMock,
+    generateAsync: jsZipGenerateAsyncMock,
+  })),
+}));
+
+vi.mock('xlsx', () => ({
+  utils: {
+    book_new: xlsxBookNewMock,
+    aoa_to_sheet: xlsxAoaToSheetMock,
+    book_append_sheet: xlsxBookAppendSheetMock,
+  },
+  write: xlsxWriteMock,
+}));
+
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App, { sanitizePlannerSnapshot } from './App';
@@ -15,6 +55,10 @@ beforeAll(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  htmlToImageToBlobMock.mockResolvedValue({
+    arrayBuffer: async () => new ArrayBuffer(8),
+  });
+  jsZipGenerateAsyncMock.mockResolvedValue(new Blob(['zip'], { type: 'application/zip' }));
 });
 
 function readBlobText(blob: Blob): Promise<string> {
@@ -290,6 +334,88 @@ describe('planner snapshot download', () => {
     expect(json).toContain('"intervalsIcuId": "48566311"');
     expect(json).toContain('"pendingIntervalsDeletes"');
     expect(json).toContain('"dateKey": "2027-02-09"');
+    expect(clickSpy).toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it('includes the planner json inside the download package', async () => {
+    const user = userEvent.setup();
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Upload JSON' }));
+
+    const fileInput = document.querySelector('input[type="file"]');
+    expect(fileInput).not.toBeNull();
+
+    const file = new File(
+      [
+        JSON.stringify({
+          version: 1,
+          activeTab: 'calendar',
+          unitSystem: 'metric',
+          weeksInput: '1',
+          weeks: [
+            {
+              totalTime: '5h',
+              z3Time: '45m',
+              z2Time: '1h 30m',
+              elevation: '800',
+              longRunPercent: '30',
+            },
+          ],
+          weekDesign: {
+            raceDate: '2027-02-14',
+            events: [null],
+            focusRows: [{ id: 'z1-focus', label: 'Z1', abbreviation: 'Z1', isCustom: false }],
+            focusSelections: { 'z1-focus': [true] },
+            phaseBlocks: [],
+          },
+          scheduledWorkouts: {
+            '2027-02-08': {
+              type: 'trail-run',
+              title: 'Hill Reps',
+              totalTime: '1h 20m',
+              z3Time: '20m',
+              z2Time: '25m',
+              elevation: '450',
+              notes: 'Steep climb repeats',
+              intervalsIcuId: 48566311,
+            },
+          },
+          pendingIntervalsDeletes: [{ dateKey: '2027-02-09', intervalsIcuId: 48566312 }],
+        }),
+      ],
+      'training-plan-state.json',
+      { type: 'application/json' },
+    );
+
+    await user.upload(fileInput as HTMLInputElement, file);
+    await waitFor(() => expect(screen.getByText('Hill Reps')).toBeInTheDocument());
+
+    vi.mocked(URL.createObjectURL).mockClear();
+    vi.mocked(URL.revokeObjectURL).mockClear();
+
+    await user.click(screen.getByRole('button', { name: 'Download Package' }));
+
+    await waitFor(() => {
+      expect(jsZipFileMock).toHaveBeenCalledWith(
+        'training-plan-state.json',
+        expect.stringContaining('"title": "Hill Reps"'),
+      );
+    });
+
+    expect(jsZipFileMock).toHaveBeenCalledWith('training-plan-chart.png', expect.any(ArrayBuffer));
+    expect(jsZipFileMock).toHaveBeenCalledWith('week-focus.png', expect.any(ArrayBuffer));
+    expect(jsZipFileMock).toHaveBeenCalledWith('calendar.xlsx', expect.any(Uint8Array));
+    expect(jsZipFileMock).toHaveBeenCalledWith(
+      'training-plan-state.json',
+      expect.stringContaining('"pendingIntervalsDeletes"'),
+    );
+    expect(jsZipGenerateAsyncMock).toHaveBeenCalledWith({ type: 'blob' });
     expect(clickSpy).toHaveBeenCalled();
     clickSpy.mockRestore();
   });

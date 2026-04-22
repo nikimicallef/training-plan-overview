@@ -2076,10 +2076,8 @@ export default function App() {
     ];
   }
 
-  function handleDownloadJson() {
-    setDownloadError('');
-
-    const snapshot: PlannerSnapshot = {
+  function buildPlannerSnapshot(): PlannerSnapshot {
+    return {
       version: 1,
       activeTab,
       unitSystem,
@@ -2089,6 +2087,11 @@ export default function App() {
       scheduledWorkouts,
       pendingIntervalsDeletes,
     };
+  }
+
+  function handleDownloadJson() {
+    setDownloadError('');
+    const snapshot = buildPlannerSnapshot();
 
     const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
       type: 'application/json',
@@ -2429,12 +2432,14 @@ export default function App() {
         bookType: 'xlsx',
         type: 'array',
       });
+      const snapshot = buildPlannerSnapshot();
 
       const zip = new JSZip();
 
       zip.file('training-plan-chart.png', await chartBlob.arrayBuffer());
       zip.file('week-focus.png', await weekDesignBlob.arrayBuffer());
       zip.file('calendar.xlsx', workbookBytes);
+      zip.file('training-plan-state.json', JSON.stringify(snapshot, null, 2));
 
       const zipBlob = await zip.generateAsync({ type: 'blob' });
 
