@@ -906,6 +906,39 @@ function getPrescribedWeek(parsedWeeks: ParsedWeek[], weekIndex: number): Parsed
   return parsedWeeks[weekIndex] ?? deriveWeek({ ...EMPTY_WEEK }, weekIndex);
 }
 
+function getRoundedRectPath(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+  options: { roundTop?: boolean; roundBottom?: boolean } = {},
+) {
+  if (height <= 0 || width <= 0) {
+    return '';
+  }
+
+  const roundTop = options.roundTop ?? false;
+  const roundBottom = options.roundBottom ?? false;
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  const topRadius = roundTop ? safeRadius : 0;
+  const bottomRadius = roundBottom ? safeRadius : 0;
+  const right = x + width;
+  const bottom = y + height;
+
+  return [
+    `M ${x} ${bottom - bottomRadius}`,
+    bottomRadius > 0 ? `Q ${x} ${bottom} ${x + bottomRadius} ${bottom}` : `L ${x} ${bottom}`,
+    `L ${right - bottomRadius} ${bottom}`,
+    bottomRadius > 0 ? `Q ${right} ${bottom} ${right} ${bottom - bottomRadius}` : `L ${right} ${bottom}`,
+    `L ${right} ${y + topRadius}`,
+    topRadius > 0 ? `Q ${right} ${y} ${right - topRadius} ${y}` : `L ${right} ${y}`,
+    `L ${x + topRadius} ${y}`,
+    topRadius > 0 ? `Q ${x} ${y} ${x} ${y + topRadius}` : `L ${x} ${y}`,
+    'Z',
+  ].join(' ');
+}
+
 function Chart({
   data,
   eventGrades,
@@ -965,10 +998,6 @@ function Chart({
         width="100%"
       >
         <title id="training-chart-title">Training plan analysis chart</title>
-
-        <text className="chart-title" x={width / 2} y={34}>
-          Training Plan Analysis
-        </text>
 
         <g className="chart-legend" transform={`translate(${width / 2 - 200}, 46)`}>
           <LegendSwatch color={COLORS.z1} label="Z1" type="square" x={0} />
@@ -1044,39 +1073,40 @@ function Chart({
 
         {data.map((week, index) => {
           const x = getX(index);
+          const barX = x - barWidth / 2;
+          const segmentRadius = 10;
           const z3Top = getLeftY(week.totalMinutes);
           const z3Height = week.totalMinutes === 0 ? 0 : (week.z3Minutes / timeAxisMax) * plotHeight;
           const z2Top = getLeftY(week.z1Minutes + week.z2Minutes);
           const z2Height = week.totalMinutes === 0 ? 0 : (week.z2Minutes / timeAxisMax) * plotHeight;
           const z1Top = getLeftY(week.z1Minutes);
           const z1Height = week.totalMinutes === 0 ? 0 : (week.z1Minutes / timeAxisMax) * plotHeight;
+          const showZ1 = z1Height > 0;
+          const showZ2 = z2Height > 0;
+          const showZ3 = z3Height > 0;
 
           return (
             <g key={week.week}>
-              <rect
+              <path
+                d={getRoundedRectPath(barX, z1Top, barWidth, Math.max(z1Height, 0), segmentRadius, {
+                  roundTop: showZ1 && !showZ2 && !showZ3,
+                  roundBottom: showZ1,
+                })}
                 fill={COLORS.z1}
-                height={Math.max(z1Height, 0)}
-                rx={10}
-                ry={10}
-                width={barWidth}
-                x={x - barWidth / 2}
-                y={z1Top}
               />
-              <rect
+              <path
+                d={getRoundedRectPath(barX, z2Top, barWidth, Math.max(z2Height, 0), segmentRadius, {
+                  roundTop: showZ2 && !showZ3,
+                  roundBottom: showZ2 && !showZ1,
+                })}
                 fill={COLORS.z2}
-                height={Math.max(z2Height, 0)}
-                width={barWidth}
-                x={x - barWidth / 2}
-                y={z2Top}
               />
-              <rect
+              <path
+                d={getRoundedRectPath(barX, z3Top, barWidth, Math.max(z3Height, 0), segmentRadius, {
+                  roundTop: showZ3,
+                  roundBottom: showZ3 && !showZ1 && !showZ2,
+                })}
                 fill={COLORS.z3}
-                height={Math.max(z3Height, 0)}
-                rx={10}
-                ry={10}
-                width={barWidth}
-                x={x - barWidth / 2}
-                y={z3Top}
               />
               {index % labelStep === 0 || index === data.length - 1 ? (
                 <text className="week-label" x={x} y={height - margin.bottom + 26}>
@@ -1552,12 +1582,12 @@ export default function App() {
 
     try {
       const chartBlob = await htmlToImage.toBlob(chartExportRef.current, {
-        backgroundColor: '#fffdf8',
+        backgroundColor: '#275374',
         cacheBust: true,
         pixelRatio: 2,
       });
       const weekDesignBlob = await htmlToImage.toBlob(weekDesignExportRef.current, {
-        backgroundColor: '#fffdf8',
+        backgroundColor: '#275374',
         cacheBust: true,
         pixelRatio: 2,
       });
@@ -1699,7 +1729,63 @@ export default function App() {
           <aside className="chart-pane">
           <div className="hero-copy hero-copy-compact">
             <div className="hero-bar">
-              <h1>Training Plan Builder</h1>
+              <div className="hero-main">
+                <h1>Training Plan Builder</h1>
+                <div className="hero-notes">
+                  <p>
+                    Vibe coded by{' '}
+                    <a href="https://www.instagram.com/niki.runs/" rel="noreferrer" target="_blank">
+                      Niki Micallef
+                    </a>{' '}
+                    from{' '}
+                    <a href="https://bornonthetrail.substack.com/" rel="noreferrer" target="_blank">
+                      Born on the Trail
+                    </a>
+                    .
+                  </p>
+                  <p>
+                    Visit{' '}
+                    <a href="https://bornonthetrail.substack.com/" rel="noreferrer" target="_blank">
+                      Born on the Trail
+                    </a>{' '}
+                    for practical training and racing ideas for trail and ultra marathon races.
+                  </p>
+                  <p>
+                    Prefer listening on the run? Tune in on{' '}
+                    <a href="https://www.youtube.com/@bornonthetrail" rel="noreferrer" target="_blank">
+                      YouTube
+                    </a>
+                    ,{' '}
+                    <a
+                      href="https://open.spotify.com/show/6o5yHthUidO0No4VA3xdVb"
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Spotify
+                    </a>
+                    , or{' '}
+                    <a
+                      href="https://podcasts.apple.com/us/podcast/born-on-the-trail-going-longer/id1857231629"
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Apple Podcasts
+                    </a>
+                    .
+                  </p>
+                  <p>
+                    Need coaching or direct training guidance?{' '}
+                    <a
+                      href="https://bornonthetrail.substack.com/p/coaching"
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Hire me as a coach
+                    </a>
+                    .
+                  </p>
+                </div>
+              </div>
               <div className="hero-actions">
                 <button className="secondary-button" onClick={handleDownloadJson} type="button">
                   Download JSON

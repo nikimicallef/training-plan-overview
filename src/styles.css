@@ -1,21 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Viga&display=swap');
+
 :root {
   color-scheme: light;
-  --bg: #f5f0e7;
-  --bg-accent: #d7efe4;
-  --ink: #223021;
-  --muted: #5d6f60;
-  --panel: rgba(255, 252, 247, 0.88);
-  --panel-strong: #fffdf8;
-  --panel-border: rgba(54, 72, 58, 0.12);
-  --shadow: 0 22px 60px rgba(47, 61, 50, 0.12);
+  --bg: #275374;
+  --bg-accent: #e39a5f;
+  --ink: #ffffff;
+  --muted: #f2e5da;
+  --panel: rgba(45, 91, 126, 0.88);
+  --panel-strong: rgba(54, 102, 138, 0.94);
+  --panel-border: rgba(242, 229, 218, 0.16);
+  --shadow: 0 22px 60px rgba(7, 18, 32, 0.28);
+  --accent: #e39a5f;
+  --accent-soft: #e5b58e;
+  --contrast-soft: #f2e5da;
   --z1: #9bd2ff;
   --z2: #ffe38a;
   --z3: #ffb3ad;
   --long-run: #2c9d62;
   --elevation: #ba36f5;
-  --danger: #c14d4d;
-  --font-display: "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
-  --font-body: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
+  --danger: #ffb3ad;
+  --font-display: 'Viga', 'Trebuchet MS', sans-serif;
+  --font-body: 'Viga', 'Trebuchet MS', sans-serif;
+  --font-chart: 'Avenir Next', 'Helvetica Neue', 'Segoe UI', sans-serif;
 }
 
 * {
@@ -30,11 +36,12 @@ body {
   margin: 0;
   min-width: 320px;
   font-family: var(--font-body);
+  font-synthesis: none;
   color: var(--ink);
   background:
-    radial-gradient(circle at top left, rgba(255, 214, 167, 0.72), transparent 30%),
-    radial-gradient(circle at top right, rgba(157, 212, 185, 0.9), transparent 28%),
-    linear-gradient(180deg, #f7f2ea 0%, #eff4e7 100%);
+    radial-gradient(circle at top left, rgba(227, 154, 95, 0.28), transparent 28%),
+    radial-gradient(circle at top right, rgba(229, 181, 142, 0.22), transparent 26%),
+    linear-gradient(180deg, #2d5b7e 0%, #275374 55%, #234764 100%);
 }
 
 button,
@@ -51,7 +58,7 @@ textarea {
 code {
   padding: 0.1rem 0.35rem;
   border-radius: 0.4rem;
-  background: rgba(34, 48, 33, 0.08);
+  background: rgba(242, 229, 218, 0.16);
 }
 
 #root {
@@ -106,20 +113,50 @@ code {
 .hero-bar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: stretch;
   gap: 1rem;
+}
+
+.hero-main {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .hero-actions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: end;
+  flex: 0 0 11rem;
+  flex-direction: column;
+  justify-content: flex-start;
   gap: 0.55rem;
 }
 
 .hero-copy-compact h1 {
   font-size: clamp(1.15rem, 1.5vw, 1.5rem);
   line-height: 1.02;
+}
+
+.hero-notes {
+  display: grid;
+  gap: 0.32rem;
+  margin-top: 0.55rem;
+}
+
+.hero-notes p {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.hero-notes a {
+  color: var(--accent-soft);
+  text-decoration: none;
+}
+
+.hero-notes a:hover,
+.hero-notes a:focus-visible {
+  color: var(--contrast-soft);
+  text-decoration: underline;
 }
 
 .workspace-divider {
@@ -137,13 +174,13 @@ code {
   width: 2px;
   height: calc(100% - 1rem);
   border-radius: 999px;
-  background: rgba(54, 72, 58, 0.16);
+  background: rgba(242, 229, 218, 0.22);
 }
 
 .workspace-divider:focus-visible::before,
 .workspace-divider:hover::before,
 .workspace-dragging .workspace-divider::before {
-  background: rgba(39, 114, 77, 0.42);
+  background: rgba(227, 154, 95, 0.72);
 }
 
 .workspace-divider-grip {
@@ -154,11 +191,11 @@ code {
   transform: translate(-50%, -50%);
   border-radius: 999px;
   background:
-    radial-gradient(circle, rgba(39, 114, 77, 0.34) 1.2px, transparent 1.3px) center / 100% 16px,
-    rgba(255, 252, 247, 0.95);
+    radial-gradient(circle, rgba(227, 154, 95, 0.48) 1.2px, transparent 1.3px) center / 100% 16px,
+    rgba(39, 83, 116, 0.96);
   box-shadow:
-    0 0 0 1px rgba(54, 72, 58, 0.12),
-    0 8px 24px rgba(47, 61, 50, 0.12);
+    0 0 0 1px rgba(242, 229, 218, 0.18),
+    0 8px 24px rgba(7, 18, 32, 0.24);
 }
 
 .hero-copy::after,
@@ -170,17 +207,17 @@ code {
   width: 200px;
   height: 200px;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 196, 171, 0.32), rgba(155, 210, 255, 0.16));
+  background: linear-gradient(180deg, rgba(227, 154, 95, 0.26), rgba(242, 229, 218, 0.08));
   pointer-events: none;
 }
 
 .eyebrow {
   margin: 0 0 0.6rem;
   font-size: 0.82rem;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #62785d;
+  color: var(--accent-soft);
 }
 
 .hero-copy h1,
@@ -214,7 +251,7 @@ code {
 
 .field-label {
   font-size: 0.84rem;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
@@ -224,9 +261,9 @@ code {
   width: 100%;
   min-height: 3rem;
   padding: 0.85rem 0.95rem;
-  border: 1px solid rgba(40, 55, 42, 0.15);
+  border: 1px solid rgba(242, 229, 218, 0.2);
   border-radius: 0.95rem;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(39, 83, 116, 0.72);
   color: var(--ink);
   transition:
     border-color 140ms ease,
@@ -236,14 +273,14 @@ code {
 
 .text-input:focus {
   outline: none;
-  border-color: rgba(39, 114, 77, 0.5);
-  box-shadow: 0 0 0 4px rgba(44, 157, 98, 0.12);
+  border-color: rgba(227, 154, 95, 0.72);
+  box-shadow: 0 0 0 4px rgba(227, 154, 95, 0.18);
   transform: translateY(-1px);
 }
 
 .weeks-input {
   font-size: 1.65rem;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .helper-text {
@@ -264,9 +301,9 @@ code {
   display: inline-flex;
   gap: 0.45rem;
   padding: 0.28rem;
-  border: 1px solid rgba(40, 55, 42, 0.1);
+  border: 1px solid rgba(242, 229, 218, 0.16);
   border-radius: 999px;
-  background: rgba(245, 249, 241, 0.92);
+  background: rgba(39, 83, 116, 0.78);
   margin-bottom: 1rem;
 }
 
@@ -276,7 +313,7 @@ code {
   border-radius: 999px;
   background: transparent;
   color: var(--muted);
-  font-weight: 700;
+  font-weight: 400;
   cursor: pointer;
   transition:
     background-color 140ms ease,
@@ -291,8 +328,8 @@ code {
 }
 
 .tab-button-active {
-  background: rgba(39, 114, 77, 0.12);
-  color: #275d43;
+  background: rgba(227, 154, 95, 0.2);
+  color: var(--ink);
 }
 
 .planner-toolbar {
@@ -305,9 +342,9 @@ code {
 .planner-chip {
   min-width: 140px;
   padding: 0.75rem 0.9rem;
-  border: 1px solid rgba(40, 55, 42, 0.1);
+  border: 1px solid rgba(242, 229, 218, 0.16);
   border-radius: 1rem;
-  background: rgba(246, 249, 241, 0.88);
+  background: rgba(39, 83, 116, 0.72);
 }
 
 .planner-chip span {
@@ -369,15 +406,15 @@ code {
 .chart-summary-card {
   padding: 0.5rem 0.55rem;
   border-radius: 0.95rem;
-  background: rgba(246, 249, 241, 0.88);
-  border: 1px solid rgba(54, 72, 58, 0.08);
+  background: rgba(39, 83, 116, 0.72);
+  border: 1px solid rgba(242, 229, 218, 0.12);
 }
 
 .chart-summary-card span {
   display: block;
   margin-bottom: 0.2rem;
   font-size: 0.62rem;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
@@ -403,7 +440,7 @@ code {
 }
 
 .chart-title {
-  font-family: var(--font-display);
+  font-family: var(--font-chart);
   font-size: 0.98rem;
   font-weight: 700;
   text-anchor: middle;
@@ -414,8 +451,9 @@ code {
 .axis-label,
 .week-label,
 .axis-title {
-  fill: #415342;
+  fill: var(--contrast-soft);
   font-size: 0.74rem;
+  font-family: var(--font-chart);
 }
 
 .legend-label {
@@ -433,12 +471,12 @@ code {
 }
 
 .chart-grid {
-  stroke: rgba(82, 96, 82, 0.16);
+  stroke: rgba(242, 229, 218, 0.16);
   stroke-dasharray: 3 5;
 }
 
 .chart-axis {
-  stroke: rgba(82, 96, 82, 0.55);
+  stroke: rgba(242, 229, 218, 0.4);
   stroke-width: 1.2;
 }
 
@@ -447,10 +485,10 @@ code {
   display: grid;
   place-items: center;
   min-height: 100%;
-  border: 1px dashed rgba(40, 55, 42, 0.2);
+  border: 1px dashed rgba(242, 229, 218, 0.22);
   border-radius: 1.2rem;
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(39, 83, 116, 0.42);
 }
 
 .section-head {
@@ -491,7 +529,7 @@ code {
   margin: -1.2rem -1.2rem 1rem;
   padding: 1.2rem 1.2rem 1rem;
   background:
-    linear-gradient(180deg, rgba(255, 252, 247, 0.98) 0%, rgba(255, 252, 247, 0.94) 78%, rgba(255, 252, 247, 0) 100%);
+    linear-gradient(180deg, rgba(39, 83, 116, 0.98) 0%, rgba(39, 83, 116, 0.92) 78%, rgba(39, 83, 116, 0) 100%);
   backdrop-filter: blur(18px);
 }
 
@@ -507,9 +545,9 @@ code {
 
 .planner-panel {
   padding: 1rem;
-  border: 1px solid rgba(40, 55, 42, 0.1);
+  border: 1px solid rgba(242, 229, 218, 0.14);
   border-radius: 1.2rem;
-  background: rgba(255, 255, 255, 0.54);
+  background: rgba(39, 83, 116, 0.56);
 }
 
 .planner-panel-head {
@@ -528,10 +566,10 @@ code {
 
 .planner-empty-line {
   padding: 0.8rem 0.95rem;
-  border: 1px dashed rgba(40, 55, 42, 0.18);
+  border: 1px dashed rgba(242, 229, 218, 0.2);
   border-radius: 1rem;
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(39, 83, 116, 0.4);
 }
 
 .phase-block-list {
@@ -560,23 +598,23 @@ code {
 
 .secondary-button {
   padding: 0.72rem 0.95rem;
-  background: rgba(39, 114, 77, 0.12);
-  color: #275d43;
-  font-weight: 700;
+  background: rgba(227, 154, 95, 0.18);
+  color: var(--ink);
+  font-weight: 400;
 }
 
 .icon-button {
   padding: 0.78rem 0.9rem;
-  background: rgba(193, 77, 77, 0.12);
-  color: #8a3030;
-  font-weight: 700;
+  background: rgba(255, 179, 173, 0.18);
+  color: var(--ink);
+  font-weight: 400;
 }
 
 .primary-button {
   padding: 0.78rem 1rem;
-  background: #275d43;
-  color: #fffdf8;
-  font-weight: 700;
+  background: var(--accent);
+  color: #183246;
+  font-weight: 400;
 }
 
 .primary-button:disabled {
@@ -602,12 +640,12 @@ code {
   border-collapse: collapse;
   min-width: max-content;
   width: max-content;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(39, 83, 116, 0.64);
 }
 
 .calendar-table th,
 .calendar-table td {
-  border: 1px solid rgba(40, 55, 42, 0.16);
+  border: 1px solid rgba(242, 229, 218, 0.16);
   padding: 0;
   vertical-align: top;
 }
@@ -622,16 +660,16 @@ code {
 .calendar-week-label {
   min-width: 150px;
   padding: 0.7rem 0.8rem;
-  background: rgba(248, 244, 236, 0.98);
+  background: rgba(33, 70, 97, 0.98);
   text-align: left;
 }
 
 .calendar-head-cell {
   min-width: 108px;
   padding: 0.55rem 0.45rem;
-  background: rgba(245, 249, 241, 0.95);
+  background: rgba(39, 83, 116, 0.95);
   font-size: 0.76rem;
-  font-weight: 700;
+  font-weight: 400;
   text-align: center;
 }
 
@@ -662,7 +700,7 @@ code {
   min-height: 104px;
   padding: 0.5rem;
   border: 0;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(39, 83, 116, 0.72);
   text-align: left;
   cursor: pointer;
   transition:
@@ -673,11 +711,11 @@ code {
 .calendar-day-button:hover,
 .calendar-day-button:focus-visible {
   outline: none;
-  background: rgba(155, 210, 255, 0.18);
+  background: rgba(227, 154, 95, 0.18);
 }
 
 .calendar-day-button-filled {
-  background: rgba(155, 210, 255, 0.16);
+  background: rgba(229, 181, 142, 0.18);
 }
 
 .calendar-day-date {
@@ -702,13 +740,13 @@ code {
 .calendar-day-metric {
   margin-top: 0.5rem;
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--ink);
 }
 
 .calendar-day-recovery {
   margin-top: 0.5rem;
-  font-weight: 700;
+  font-weight: 400;
   color: #275d43;
 }
 
@@ -722,11 +760,11 @@ code {
   width: 170px;
   min-width: 170px;
   padding: 0.55rem 0.65rem;
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(39, 83, 116, 0.74);
 }
 
 .calendar-prescribed-cell {
-  background: rgba(255, 227, 138, 0.14);
+  background: rgba(227, 154, 95, 0.16);
 }
 
 .calendar-summary-grid {
@@ -746,7 +784,7 @@ code {
   display: inline-grid;
   gap: 0.8rem;
   padding: 1rem;
-  background: #fffdf8;
+  background: var(--bg);
   color: var(--ink);
 }
 
@@ -770,7 +808,7 @@ code {
 
 .export-empty {
   padding: 1rem 1.1rem;
-  border: 1px dashed rgba(40, 55, 42, 0.18);
+  border: 1px dashed rgba(242, 229, 218, 0.2);
   border-radius: 1rem;
 }
 
@@ -778,14 +816,14 @@ code {
   border-collapse: collapse;
   min-width: max-content;
   width: max-content;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(39, 83, 116, 0.64);
 }
 
 .week-design-table th,
 .week-design-table td {
   min-width: 58px;
   padding: 0;
-  border: 1px solid rgba(40, 55, 42, 0.18);
+  border: 1px solid rgba(242, 229, 218, 0.16);
   text-align: center;
 }
 
@@ -794,7 +832,7 @@ code {
   padding: 0.55rem 0.75rem;
   text-align: left;
   font-size: 0.84rem;
-  background: rgba(248, 244, 236, 0.98);
+  background: rgba(33, 70, 97, 0.98);
   z-index: 2;
 }
 
@@ -807,8 +845,8 @@ code {
 .week-design-header-cell {
   padding: 0.45rem 0.22rem;
   font-size: 0.7rem;
-  font-weight: 700;
-  background: rgba(245, 249, 241, 0.95);
+  font-weight: 400;
+  background: rgba(39, 83, 116, 0.95);
 }
 
 .week-design-header-group {
@@ -848,10 +886,10 @@ code {
 
 .week-design-phase-cell {
   padding: 0.58rem 0.24rem;
-  background: rgba(155, 210, 255, 0.2);
+  background: rgba(227, 154, 95, 0.18);
   font-size: 0.8rem;
-  font-weight: 700;
-  color: #275d43;
+  font-weight: 400;
+  color: var(--ink);
 }
 
 .week-design-phase-empty {
@@ -878,7 +916,7 @@ code {
   background: rgba(39, 114, 77, 0.14);
   color: #275d43;
   font-size: 0.74rem;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .custom-row-editor {
@@ -891,10 +929,11 @@ code {
   width: 100%;
   min-width: 0;
   padding: 0.45rem 0.6rem;
-  border: 1px solid rgba(40, 55, 42, 0.12);
+  border: 1px solid rgba(242, 229, 218, 0.16);
   border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(39, 83, 116, 0.72);
   font: inherit;
+  color: var(--ink);
 }
 
 .custom-row-remove {
@@ -922,9 +961,9 @@ code {
 .week-checkbox span {
   width: 1rem;
   height: 1rem;
-  border: 1px solid rgba(40, 55, 42, 0.24);
+  border: 1px solid rgba(242, 229, 218, 0.26);
   border-radius: 0.3rem;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(39, 83, 116, 0.9);
   transition:
     background-color 140ms ease,
     border-color 140ms ease,
@@ -932,14 +971,14 @@ code {
 }
 
 .week-checkbox input:checked + span {
-  border-color: rgba(39, 114, 77, 0.7);
+  border-color: rgba(227, 154, 95, 0.72);
   background:
-    linear-gradient(135deg, rgba(39, 114, 77, 0.12), rgba(44, 157, 98, 0.42));
+    linear-gradient(135deg, rgba(227, 154, 95, 0.28), rgba(229, 181, 142, 0.52));
   transform: scale(1.05);
 }
 
 .week-card {
-  border: 1px solid rgba(40, 55, 42, 0.1);
+  border: 1px solid rgba(242, 229, 218, 0.16);
   border-radius: 1.3rem;
   background: var(--panel-strong);
   padding: 1.15rem;
@@ -956,7 +995,7 @@ code {
 .week-kicker {
   margin: 0 0 0.25rem;
   font-size: 0.86rem;
-  font-weight: 700;
+  font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
@@ -971,9 +1010,9 @@ code {
 .week-badge {
   padding: 0.45rem 0.7rem;
   border-radius: 999px;
-  background: rgba(155, 210, 255, 0.22);
-  font-weight: 700;
-  color: #225a7e;
+  background: rgba(227, 154, 95, 0.18);
+  font-weight: 400;
+  color: var(--ink);
 }
 
 .week-fields {
@@ -1003,7 +1042,7 @@ code {
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(30, 39, 31, 0.32);
+  background: rgba(7, 18, 32, 0.42);
   backdrop-filter: blur(10px);
   z-index: 30;
 }
@@ -1013,10 +1052,10 @@ code {
   max-height: calc(100vh - 2rem);
   overflow: auto;
   padding: 1.25rem;
-  border: 1px solid rgba(54, 72, 58, 0.12);
+  border: 1px solid rgba(242, 229, 218, 0.16);
   border-radius: 1.4rem;
-  background: rgba(255, 252, 247, 0.98);
-  box-shadow: 0 24px 70px rgba(31, 42, 33, 0.22);
+  background: rgba(39, 83, 116, 0.98);
+  box-shadow: 0 24px 70px rgba(7, 18, 32, 0.32);
 }
 
 .modal-head {
@@ -1037,7 +1076,7 @@ code {
 .modal-close {
   width: 2rem;
   height: 2rem;
-  background: rgba(40, 55, 42, 0.08);
+  background: rgba(242, 229, 218, 0.14);
   color: var(--ink);
 }
 
@@ -1053,10 +1092,10 @@ code {
   align-items: center;
   gap: 0.55rem;
   padding: 0.7rem 0.85rem;
-  border: 1px solid rgba(40, 55, 42, 0.12);
+  border: 1px solid rgba(242, 229, 218, 0.16);
   border-radius: 0.95rem;
-  background: rgba(246, 249, 241, 0.88);
-  font-weight: 700;
+  background: rgba(39, 83, 116, 0.72);
+  font-weight: 400;
 }
 
 .checkbox-row input {
@@ -1068,9 +1107,9 @@ code {
   width: 100%;
   min-height: 7rem;
   padding: 0.85rem 0.95rem;
-  border: 1px solid rgba(40, 55, 42, 0.15);
+  border: 1px solid rgba(242, 229, 218, 0.16);
   border-radius: 0.95rem;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(39, 83, 116, 0.72);
   color: var(--ink);
 }
 
@@ -1147,11 +1186,16 @@ code {
   }
 
   .hero-actions {
+    flex: none;
     justify-content: stretch;
   }
 
   .hero-actions > button {
     width: 100%;
+  }
+
+  .hero-notes {
+    gap: 0.42rem;
   }
 
   .modal-grid,
