@@ -38,7 +38,7 @@ vi.mock('xlsx', () => ({
   write: xlsxWriteMock,
 }));
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App, { buildIntervalsEventRequestBody, sanitizePlannerSnapshot } from './App';
 
@@ -129,6 +129,7 @@ describe('planner snapshot restore', () => {
     expect(snapshot?.weekDesign.events[0].eventGrade).toBe('C');
     expect(snapshot?.weekDesign.focusRows[0].abbreviation).toBe('R');
     expect(snapshot?.weekDesign.phaseBlocks[0].abbreviation).toBe('BA');
+    expect(snapshot?.weekDesign.phaseBlocks[0].color).toBe('#275374');
     expect(snapshot?.scheduledWorkouts['2026-10-29']).toEqual({
       title: '',
       type: 'rest',
@@ -233,6 +234,68 @@ describe('planner snapshot restore', () => {
     await user.click(screen.getByText('Tempo Climb'));
     expect(screen.getByDisplayValue('48566309')).toBeInTheDocument();
   });
+
+  it('drops overlapping phase goals during snapshot restore and keeps colors sanitized', () => {
+    const snapshot = sanitizePlannerSnapshot({
+      version: 1,
+      activeTab: 'week',
+      weeksInput: '4',
+      weeks: [{}, {}, {}, {}],
+      weekDesign: {
+        raceDate: '2027-02-14',
+        events: [null, null, null, null],
+        focusRows: [{ id: 'recovery', label: 'Recovery', abbreviation: 'R', isCustom: false }],
+        focusSelections: { recovery: [false, false, false, false] },
+        phaseBlocks: [
+          {
+            id: 'phase-1',
+            label: 'Base',
+            abbreviation: 'BA',
+            color: '#112233',
+            startWeekIndex: 0,
+            endWeekIndex: 1,
+          },
+          {
+            id: 'phase-2',
+            label: 'Build',
+            abbreviation: 'BU',
+            color: '#445566',
+            startWeekIndex: 1,
+            endWeekIndex: 2,
+          },
+          {
+            id: 'phase-3',
+            label: 'Peak',
+            abbreviation: 'PE',
+            color: 'invalid',
+            startWeekIndex: 2,
+            endWeekIndex: 3,
+          },
+        ],
+      },
+      scheduledWorkouts: {},
+      pendingIntervalsDeletes: [],
+    });
+
+    expect(snapshot?.weekDesign.phaseBlocks).toEqual([
+      {
+        id: 'phase-1',
+        label: 'Base',
+        abbreviation: 'BA',
+        color: '#112233',
+        startWeekIndex: 0,
+        endWeekIndex: 1,
+      },
+      {
+        id: 'phase-3',
+        label: 'Peak',
+        abbreviation: 'PE',
+        color: '#9bd2ff',
+        startWeekIndex: 2,
+        endWeekIndex: 3,
+      },
+    ]);
+  });
 });
 
 describe('intervals payload builder', () => {
@@ -290,6 +353,58 @@ describe('intervals payload builder', () => {
 });
 
 describe('planner snapshot download', () => {
+  it('warns before unload when there are unsaved changes and clears after download', async () => {
+    const user = userEvent.setup();
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+
+    render(<App />);
+
+    const cleanEvent = new Event('beforeunload', { cancelable: true });
+    fireEvent(window, cleanEvent);
+    expect(cleanEvent.defaultPrevented).toBe(false);
+
+    await user.type(screen.getByLabelText('Weeks'), '1');
+
+    const dirtyEvent = new Event('beforeunload', { cancelable: true });
+    fireEvent(window, dirtyEvent);
+    expect(dirtyEvent.defaultPrevented).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: 'Download JSON' }));
+
+    const resetEvent = new Event('beforeunload', { cancelable: true });
+    fireEvent(window, resetEvent);
+    expect(resetEvent.defaultPrevented).toBe(false);
+    clickSpy.mockRestore();
+  });
+
+  it('prevents overlapping phase goals in the week editor', async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Add Phase Goal' }));
+    await user.click(screen.getByRole('button', { name: 'Add Phase Goal' }));
+    await user.click(screen.getByRole('button', { name: 'Add Phase Goal' }));
+
+    const phaseCards = document.querySelectorAll('.phase-block-card');
+    expect(phaseCards).toHaveLength(3);
+
+    const secondFromSelect = within(phaseCards[1] as HTMLElement).getByLabelText('From');
+    const overlappingOption = Array.from((secondFromSelect as HTMLSelectElement).options).find(
+      (option) => option.value === '1',
+    );
+
+    expect(overlappingOption?.disabled).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: 'Add Phase Goal' }));
+
+    expect(
+      screen.getByText('Phase goals cannot overlap. Remove or shorten an existing phase first.'),
+    ).toBeInTheDocument();
+  });
+
   it('downloads the current planner state as json', async () => {
     const user = userEvent.setup();
     const clickSpy = vi

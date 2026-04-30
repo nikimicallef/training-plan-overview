@@ -5,6 +5,7 @@ import {
   useDeferredValue,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -47,6 +48,7 @@ type PhaseBlock = {
   id: string;
   label: string;
   abbreviation: string;
+  color: string;
   startWeekIndex: number;
   endWeekIndex: number;
 };
@@ -210,6 +212,14 @@ const WORKOUT_TYPE_OPTIONS: Array<{ value: Exclude<WorkoutType, ''>; label: stri
   { value: 'other', label: 'Other' },
   { value: 'rest', label: 'Rest' },
 ];
+const DEFAULT_PHASE_GOAL_COLORS = [
+  '#275374',
+  '#e39a5f',
+  '#9bd2ff',
+  '#ba36f5',
+  '#2c9d62',
+  '#ffb3ad',
+];
 
 function createEmptyIntervalsSyncState(): IntervalsSyncState {
   return {
@@ -242,6 +252,110 @@ function getEventGradeBandColor(grade: EventGrade): string | null {
 
 function sanitizeAbbreviation(value: unknown): string {
   return sanitizeString(value).trim().slice(0, 2).toUpperCase();
+}
+
+function sanitizePhaseColor(value: unknown, fallback: string): string {
+  const color = sanitizeString(value).trim();
+
+  return /^#[\da-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
+}
+
+function getDefaultPhaseGoalColor(index: number): string {
+  return DEFAULT_PHASE_GOAL_COLORS[index % DEFAULT_PHASE_GOAL_COLORS.length];
+}
+
+function rangesOverlap(
+  startWeekIndex: number,
+  endWeekIndex: number,
+  otherStartWeekIndex: number,
+  otherEndWeekIndex: number,
+): boolean {
+  return startWeekIndex <= otherEndWeekIndex && otherStartWeekIndex <= endWeekIndex;
+}
+
+function hasPhaseBlockOverlap(
+  candidate: Pick<PhaseBlock, 'id' | 'startWeekIndex' | 'endWeekIndex'>,
+  phaseBlocks: Array<Pick<PhaseBlock, 'id' | 'startWeekIndex' | 'endWeekIndex'>>,
+): boolean {
+  return phaseBlocks.some(
+    (block) =>
+      block.id !== candidate.id &&
+      rangesOverlap(
+        candidate.startWeekIndex,
+        candidate.endWeekIndex,
+        block.startWeekIndex,
+        block.endWeekIndex,
+      ),
+  );
+}
+
+function normalizePhaseBlocks(phaseBlocks: PhaseBlock[], weekCount: number): PhaseBlock[] {
+  if (weekCount <= 0) {
+    return [];
+  }
+
+  return phaseBlocks.reduce<PhaseBlock[]>((accepted, block, index) => {
+    const startWeekIndex = clamp(block.startWeekIndex, 0, weekCount - 1);
+    const endWeekIndex = clamp(block.endWeekIndex, startWeekIndex, weekCount - 1);
+    const candidate: PhaseBlock = {
+      ...block,
+      color: sanitizePhaseColor(block.color, getDefaultPhaseGoalColor(index)),
+      startWeekIndex,
+      endWeekIndex,
+    };
+
+    if (hasPhaseBlockOverlap(candidate, accepted)) {
+      return accepted;
+    }
+
+    accepted.push(candidate);
+    return accepted;
+  }, []);
+}
+
+function getNextAvailablePhaseBlockRange(
+  phaseBlocks: PhaseBlock[],
+  weekCount: number,
+): Pick<PhaseBlock, 'startWeekIndex' | 'endWeekIndex'> | null {
+  const occupiedWeeks = new Set<number>();
+
+  phaseBlocks.forEach((block) => {
+    for (let weekIndex = block.startWeekIndex; weekIndex <= block.endWeekIndex; weekIndex += 1) {
+      occupiedWeeks.add(weekIndex);
+    }
+  });
+
+  for (let weekIndex = 0; weekIndex < weekCount; weekIndex += 1) {
+    if (occupiedWeeks.has(weekIndex)) {
+      continue;
+    }
+
+    return {
+      startWeekIndex: weekIndex,
+      endWeekIndex:
+        weekIndex + 1 < weekCount && !occupiedWeeks.has(weekIndex + 1) ? weekIndex + 1 : weekIndex,
+    };
+  }
+
+  return null;
+}
+
+function getCandidatePhaseBlockRange(
+  block: PhaseBlock,
+  field: 'startWeekIndex' | 'endWeekIndex',
+  value: number,
+): Pick<PhaseBlock, 'startWeekIndex' | 'endWeekIndex'> {
+  if (field === 'startWeekIndex') {
+    return {
+      startWeekIndex: value,
+      endWeekIndex: Math.max(block.endWeekIndex, value),
+    };
+  }
+
+  return {
+    startWeekIndex: Math.min(block.startWeekIndex, value),
+    endWeekIndex: value,
+  };
 }
 
 function getDefaultFocusAbbreviation(id: string, label: string): string {
@@ -281,19 +395,7 @@ function resizeWeekDesign(count: number, previous: WeekDesignState): WeekDesignS
         resizeBooleanSelections(safeCount, previous.focusSelections[row.id]),
       ]),
     ),
-    phaseBlocks:
-      safeCount === 0
-        ? []
-        : previous.phaseBlocks.map((block) => {
-            const startWeekIndex = clamp(block.startWeekIndex, 0, safeCount - 1);
-            const endWeekIndex = clamp(block.endWeekIndex, startWeekIndex, safeCount - 1);
-
-            return {
-              ...block,
-              startWeekIndex,
-              endWeekIndex,
-            };
-          }),
+    phaseBlocks: normalizePhaseBlocks(previous.phaseBlocks, safeCount),
   };
 }
 
@@ -627,6 +729,7 @@ function sanitizePhaseBlock(
     id: sanitizeString(value.id) || `phase-upload-${index + 1}`,
     label: sanitizeString(value.label),
     abbreviation: sanitizeAbbreviation(value.abbreviation),
+    color: sanitizePhaseColor(value.color, getDefaultPhaseGoalColor(index)),
     startWeekIndex,
     endWeekIndex,
   };
@@ -723,11 +826,14 @@ function sanitizeWeekDesignState(value: unknown, weekCount: number): WeekDesignS
         ),
       ]),
     ),
-    phaseBlocks: Array.isArray(value.phaseBlocks)
-      ? value.phaseBlocks
-          .map((block, index) => sanitizePhaseBlock(block, index, weekCount))
-          .filter((block): block is PhaseBlock => block !== null)
-      : [],
+    phaseBlocks: normalizePhaseBlocks(
+      Array.isArray(value.phaseBlocks)
+        ? value.phaseBlocks
+            .map((block, index) => sanitizePhaseBlock(block, index, weekCount))
+            .filter((block): block is PhaseBlock => block !== null)
+        : [],
+      weekCount,
+    ),
   };
 }
 
@@ -1161,6 +1267,10 @@ function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
+function serializePlannerSnapshot(snapshot: PlannerSnapshot): string {
+  return JSON.stringify(snapshot);
+}
+
 function readTextFromFile(file: File): Promise<string> {
   if (typeof file.text === 'function') {
     return file.text();
@@ -1206,31 +1316,42 @@ function buildMonthSegments(columns: WeekColumn[]): Array<{ label: string; span:
 function buildPhaseSegments(
   weekCount: number,
   phaseBlocks: PhaseBlock[],
-): Array<{ label: string; abbreviation: string; span: number; isEmpty: boolean }> {
+): Array<{ label: string; abbreviation: string; color: string; span: number; isEmpty: boolean }> {
   if (weekCount === 0) {
     return [];
   }
 
-  const assignedPhases = Array.from({ length: weekCount }, () => ({ label: '', abbreviation: '' }));
+  const assignedPhases = Array.from({ length: weekCount }, () => ({
+    label: '',
+    abbreviation: '',
+    color: '',
+  }));
 
   phaseBlocks.forEach((block) => {
     const label = block.label.trim();
     const abbreviation = block.abbreviation.trim();
 
     for (let weekIndex = block.startWeekIndex; weekIndex <= block.endWeekIndex; weekIndex += 1) {
-      assignedPhases[weekIndex] = { label, abbreviation };
+      assignedPhases[weekIndex] = { label, abbreviation, color: block.color };
     }
   });
 
-  const segments: Array<{ label: string; abbreviation: string; span: number; isEmpty: boolean }> = [];
+  const segments: Array<{
+    label: string;
+    abbreviation: string;
+    color: string;
+    span: number;
+    isEmpty: boolean;
+  }> = [];
 
-  assignedPhases.forEach(({ label, abbreviation }) => {
+  assignedPhases.forEach(({ label, abbreviation, color }) => {
     const previousSegment = segments.at(-1);
 
     if (
       previousSegment &&
       previousSegment.label === label &&
-      previousSegment.abbreviation === abbreviation
+      previousSegment.abbreviation === abbreviation &&
+      previousSegment.color === color
     ) {
       previousSegment.span += 1;
       return;
@@ -1239,6 +1360,7 @@ function buildPhaseSegments(
     segments.push({
       label,
       abbreviation,
+      color,
       span: 1,
       isEmpty: label === '',
     });
@@ -1698,6 +1820,7 @@ export default function App() {
   const [activeCalendarDate, setActiveCalendarDate] = useState<Date | null>(null);
   const [calendarDraft, setCalendarDraft] = useState<DayWorkout>({ ...EMPTY_DAY_WORKOUT });
   const [calendarDraftErrors, setCalendarDraftErrors] = useState<string[]>([]);
+  const [phaseBlockError, setPhaseBlockError] = useState('');
   const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
   const [isIntervalsModalOpen, setIsIntervalsModalOpen] = useState(false);
   const [intervalsApiKey, setIntervalsApiKey] = useState('');
@@ -1899,6 +2022,14 @@ export default function App() {
       return;
     }
 
+    const nextRange = getNextAvailablePhaseBlockRange(weekDesign.phaseBlocks, parsedWeekCount);
+
+    if (!nextRange) {
+      setPhaseBlockError('Phase goals cannot overlap. Remove or shorten an existing phase first.');
+      return;
+    }
+
+    setPhaseBlockError('');
     setWeekDesign((previous) => ({
       ...previous,
       phaseBlocks: [
@@ -1907,8 +2038,9 @@ export default function App() {
           id: nextGeneratedId('phase'),
           label: '',
           abbreviation: '',
-          startWeekIndex: 0,
-          endWeekIndex: Math.min(1, Math.max(parsedWeekCount - 1, 0)),
+          color: getDefaultPhaseGoalColor(previous.phaseBlocks.length),
+          startWeekIndex: nextRange.startWeekIndex,
+          endWeekIndex: nextRange.endWeekIndex,
         },
       ],
     }));
@@ -1916,54 +2048,106 @@ export default function App() {
 
   function updatePhaseBlock(
     blockId: string,
-    field: keyof Pick<PhaseBlock, 'label' | 'abbreviation' | 'startWeekIndex' | 'endWeekIndex'>,
+    field: keyof Pick<
+      PhaseBlock,
+      'label' | 'abbreviation' | 'color' | 'startWeekIndex' | 'endWeekIndex'
+    >,
     value: string,
   ) {
-    setWeekDesign((previous) => ({
-      ...previous,
-      phaseBlocks: previous.phaseBlocks.map((block) => {
-        if (block.id !== blockId) {
-          return block;
-        }
+    let nextError = '';
 
-        if (field === 'label') {
-          return {
-            ...block,
-            label: value,
-          };
-        }
+    setWeekDesign((previous) => {
+      const target = previous.phaseBlocks.find((block) => block.id === blockId);
 
-        if (field === 'abbreviation') {
-          return {
-            ...block,
-            abbreviation: sanitizeAbbreviation(value),
-          };
-        }
+      if (!target) {
+        return previous;
+      }
 
-        const numericValue = Number.parseInt(value, 10);
-
-        if (Number.isNaN(numericValue)) {
-          return block;
-        }
-
-        if (field === 'startWeekIndex') {
-          return {
-            ...block,
-            startWeekIndex: numericValue,
-            endWeekIndex: Math.max(block.endWeekIndex, numericValue),
-          };
-        }
+      if (field === 'label') {
+        nextError = '';
 
         return {
-          ...block,
-          endWeekIndex: numericValue,
-          startWeekIndex: Math.min(block.startWeekIndex, numericValue),
+          ...previous,
+          phaseBlocks: previous.phaseBlocks.map((block) =>
+            block.id === blockId
+              ? {
+                  ...block,
+                  label: value,
+                }
+              : block,
+          ),
         };
-      }),
-    }));
+      }
+
+      if (field === 'abbreviation') {
+        nextError = '';
+
+        return {
+          ...previous,
+          phaseBlocks: previous.phaseBlocks.map((block) =>
+            block.id === blockId
+              ? {
+                  ...block,
+                  abbreviation: sanitizeAbbreviation(value),
+                }
+              : block,
+          ),
+        };
+      }
+
+      if (field === 'color') {
+        nextError = '';
+
+        return {
+          ...previous,
+          phaseBlocks: previous.phaseBlocks.map((block) =>
+            block.id === blockId
+              ? {
+                  ...block,
+                  color: sanitizePhaseColor(value, block.color),
+                }
+              : block,
+          ),
+        };
+      }
+
+      const numericValue = Number.parseInt(value, 10);
+
+      if (Number.isNaN(numericValue)) {
+        return previous;
+      }
+
+      const nextRange = getCandidatePhaseBlockRange(target, field, numericValue);
+      const candidate = {
+        ...target,
+        ...nextRange,
+      };
+
+      if (hasPhaseBlockOverlap(candidate, previous.phaseBlocks)) {
+        nextError = 'Phase goals cannot overlap. Choose weeks before or after the occupied range.';
+        return previous;
+      }
+
+      nextError = '';
+
+      return {
+        ...previous,
+        phaseBlocks: previous.phaseBlocks.map((block) =>
+          block.id === blockId
+            ? {
+                ...block,
+                ...nextRange,
+              }
+            : block,
+        ),
+      };
+    });
+
+    setPhaseBlockError(nextError);
   }
 
   function removePhaseBlock(blockId: string) {
+    setPhaseBlockError('');
     setWeekDesign((previous) => ({
       ...previous,
       phaseBlocks: previous.phaseBlocks.filter((block) => block.id !== blockId),
@@ -2135,6 +2319,39 @@ export default function App() {
     };
   }
 
+  const currentSnapshotSignature = useMemo(
+    () => serializePlannerSnapshot(buildPlannerSnapshot()),
+    [activeTab, unitSystem, weeksInput, weeks, weekDesign, scheduledWorkouts, pendingIntervalsDeletes],
+  );
+  const [savedSnapshotSignature, setSavedSnapshotSignature] = useState('');
+  const hasUnsavedChanges =
+    savedSnapshotSignature !== '' && currentSnapshotSignature !== savedSnapshotSignature;
+
+  useEffect(() => {
+    if (savedSnapshotSignature !== '') {
+      return;
+    }
+
+    setSavedSnapshotSignature(currentSnapshotSignature);
+  }, [currentSnapshotSignature, savedSnapshotSignature]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      return;
+    }
+
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [hasUnsavedChanges]);
+
   function handleDownloadJson() {
     setDownloadError('');
     const snapshot = buildPlannerSnapshot();
@@ -2144,6 +2361,7 @@ export default function App() {
     });
 
     downloadBlob('training-plan-state.json', blob);
+    setSavedSnapshotSignature(serializePlannerSnapshot(snapshot));
   }
 
   function handleUploadJsonClick() {
@@ -2174,6 +2392,7 @@ export default function App() {
       setScheduledWorkouts(snapshot.scheduledWorkouts);
       setPendingIntervalsDeletes(snapshot.pendingIntervalsDeletes);
       setActiveTab(snapshot.activeTab);
+      setSavedSnapshotSignature(serializePlannerSnapshot(snapshot));
       setDownloadError('');
     } catch (error) {
       setDownloadError(
@@ -2492,6 +2711,7 @@ export default function App() {
       const zipBlob = await zip.generateAsync({ type: 'blob' });
 
       downloadBlob('training-plan-package.zip', zipBlob);
+      setSavedSnapshotSignature(serializePlannerSnapshot(snapshot));
     } catch (error) {
       setDownloadError(
         error instanceof Error ? error.message : 'Unable to create the download package.',
@@ -2956,7 +3176,11 @@ export default function App() {
                     {weekDesign.phaseBlocks.length === 0 ? null : (
                       <div className="phase-block-list">
                         {weekDesign.phaseBlocks.map((block) => (
-                          <article className="phase-block-card" key={block.id}>
+                          <article
+                            className="phase-block-card"
+                            key={block.id}
+                            style={{ borderLeftColor: block.color }}
+                          >
                             <label className="field-group">
                               <span className="field-label">Phase Goal</span>
                               <input
@@ -2971,6 +3195,19 @@ export default function App() {
                             </label>
 
                             <label className="field-group">
+                              <span className="field-label">Color</span>
+                              <input
+                                aria-label={`Phase color ${block.label || block.id}`}
+                                className="phase-color-input"
+                                onChange={(event) =>
+                                  updatePhaseBlock(block.id, 'color', event.target.value)
+                                }
+                                type="color"
+                                value={block.color}
+                              />
+                            </label>
+
+                            <label className="field-group">
                               <span className="field-label">From</span>
                               <select
                                 className="text-input"
@@ -2980,7 +3217,21 @@ export default function App() {
                                 value={block.startWeekIndex}
                               >
                                 {weekColumns.map((column, index) => (
-                                  <option key={`phase-start-${index + 1}`} value={index}>
+                                  <option
+                                    disabled={hasPhaseBlockOverlap(
+                                      {
+                                        ...block,
+                                        ...getCandidatePhaseBlockRange(
+                                          block,
+                                          'startWeekIndex',
+                                          index,
+                                        ),
+                                      },
+                                      weekDesign.phaseBlocks,
+                                    )}
+                                    key={`phase-start-${index + 1}`}
+                                    value={index}
+                                  >
                                     {`Wk. ${column.weeksToRace}`}
                                   </option>
                                 ))}
@@ -2997,7 +3248,21 @@ export default function App() {
                                 value={block.endWeekIndex}
                               >
                                 {weekColumns.map((column, index) => (
-                                  <option key={`phase-end-${index + 1}`} value={index}>
+                                  <option
+                                    disabled={hasPhaseBlockOverlap(
+                                      {
+                                        ...block,
+                                        ...getCandidatePhaseBlockRange(
+                                          block,
+                                          'endWeekIndex',
+                                          index,
+                                        ),
+                                      },
+                                      weekDesign.phaseBlocks,
+                                    )}
+                                    key={`phase-end-${index + 1}`}
+                                    value={index}
+                                  >
                                     {`Wk. ${column.weeksToRace}`}
                                   </option>
                                 ))}
@@ -3015,6 +3280,10 @@ export default function App() {
                         ))}
                       </div>
                     )}
+
+                    {phaseBlockError ? (
+                      <p className="helper-text helper-text-error">{phaseBlockError}</p>
+                    ) : null}
                   </section>
 
                   <section className="planner-panel">
@@ -3138,6 +3407,7 @@ export default function App() {
                               }`}
                               colSpan={segment.span}
                               key={`phase-segment-${index + 1}`}
+                              style={segment.isEmpty ? undefined : { backgroundColor: segment.color }}
                             >
                               {segment.label || ' '}
                             </td>
@@ -3497,6 +3767,7 @@ export default function App() {
                       }`}
                       colSpan={segment.span}
                       key={`export-phase-${index + 1}`}
+                      style={segment.isEmpty ? undefined : { backgroundColor: segment.color }}
                     >
                       {segment.label || ' '}
                     </td>

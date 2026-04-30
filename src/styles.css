@@ -2,12 +2,12 @@
 
 :root {
   color-scheme: light;
-  --bg: #275374;
+  --bg: #183246;
   --bg-accent: #e39a5f;
   --ink: #ffffff;
   --muted: #f2e5da;
-  --panel: rgba(45, 91, 126, 0.88);
-  --panel-strong: rgba(54, 102, 138, 0.94);
+  --panel: rgba(39, 83, 116, 0.9);
+  --panel-strong: rgba(39, 83, 116, 0.96);
   --panel-border: rgba(242, 229, 218, 0.16);
   --shadow: 0 22px 60px rgba(7, 18, 32, 0.28);
   --accent: #e39a5f;
@@ -41,7 +41,7 @@ body {
   background:
     radial-gradient(circle at top left, rgba(227, 154, 95, 0.28), transparent 28%),
     radial-gradient(circle at top right, rgba(229, 181, 142, 0.22), transparent 26%),
-    linear-gradient(180deg, #2d5b7e 0%, #275374 55%, #234764 100%);
+    linear-gradient(180deg, #214663 0%, var(--bg) 55%, #122637 100%);
 }
 
 button,
@@ -719,9 +719,11 @@ code {
 
 .phase-block-card {
   display: grid;
-  grid-template-columns: minmax(132px, 1.25fr) 88px 88px auto;
+  grid-template-columns: minmax(132px, 1.25fr) 76px 88px 88px auto;
   gap: 0.45rem;
   align-items: end;
+  padding-left: 0.55rem;
+  border-left: 4px solid transparent;
 }
 
 .phase-block-card .field-group {
@@ -738,6 +740,16 @@ code {
   align-self: stretch;
   min-height: 2.35rem;
   padding: 0.5rem 0.7rem;
+}
+
+.phase-color-input {
+  width: 100%;
+  min-height: 2.35rem;
+  padding: 0.2rem;
+  border: 1px solid rgba(242, 229, 218, 0.2);
+  border-radius: 0.75rem;
+  background: rgba(39, 83, 116, 0.72);
+  cursor: pointer;
 }
 
 .secondary-button,
