@@ -174,8 +174,8 @@ function createWorkoutPayload(
   return {
     category: 'WORKOUT',
     start_date_local: '2027-02-08T00:00:00',
-    name: marker,
-    description: `Z3 10m / Z2 20m / Z1 30m\nElevation 300 m\nIntegration test ${marker}`,
+    name: `${marker} | Z3 10m / Z2 20m / Z1 30m | Elevation 300 m`,
+    description: `Integration test ${marker}`,
     moving_time: 3600,
     external_id: `training-plan-overview:test:${marker}`,
     ...overrides,
@@ -241,8 +241,8 @@ describeLive('Intervals.icu live integration', () => {
       },
       {
         label: 'trail-run',
-        payload: createWorkoutPayload('trail-run', { type: 'Trail Run' }),
-        expected: { category: 'WORKOUT', type: 'Trail Run', movingTime: 3600 },
+        payload: createWorkoutPayload('trail-run', { type: 'TrailRun' }),
+        expected: { category: 'WORKOUT', type: 'TrailRun', movingTime: 3600 },
       },
       {
         label: 'cycling',
@@ -251,8 +251,8 @@ describeLive('Intervals.icu live integration', () => {
       },
       {
         label: 'hiking',
-        payload: createWorkoutPayload('hiking', { type: 'Other Workout' }),
-        expected: { category: 'WORKOUT', type: 'Other Workout', movingTime: 3600 },
+        payload: createWorkoutPayload('hiking', { type: 'Hike' }),
+        expected: { category: 'WORKOUT', type: 'Hike', movingTime: 3600 },
       },
       {
         label: 'strength',
@@ -261,8 +261,8 @@ describeLive('Intervals.icu live integration', () => {
       },
       {
         label: 'other',
-        payload: createWorkoutPayload('other', { type: 'Other Workout' }),
-        expected: { category: 'WORKOUT', type: 'Other Workout', movingTime: 3600 },
+        payload: createWorkoutPayload('other', { type: 'Other' }),
+        expected: { category: 'WORKOUT', type: 'Other', movingTime: 3600 },
       },
       {
         label: 'rest',
@@ -298,15 +298,15 @@ describeLive('Intervals.icu live integration', () => {
   it('updates an existing event using its Intervals.icu id', async () => {
     const created = await createEvent(
       createWorkoutPayload('update-source', {
-        type: 'Trail Run',
+        type: 'TrailRun',
       }),
     );
     const eventId = String(created.id);
     const updatedPayload = createWorkoutPayload('update-target', {
       start_date_local: '2027-02-10T00:00:00',
       type: 'Ride',
-      name: `Updated-${createUniqueMarker('name')}`,
-      description: 'Z3 5m / Z2 15m / Z1 40m\nElevation 650 m\nUpdated by integration test',
+      name: `Updated-${createUniqueMarker('name')} | Z3 5m / Z2 15m / Z1 40m | Elevation 650 m`,
+      description: 'Updated by integration test',
       moving_time: 5400,
       external_id: created.external_id ?? `training-plan-overview:test:${createUniqueMarker('update')}`,
     });

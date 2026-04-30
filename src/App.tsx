@@ -136,6 +136,7 @@ type PlannerSnapshot = {
 };
 
 export {
+  buildIntervalsEventRequestBody,
   sanitizePlannerSnapshot,
 };
 
@@ -543,7 +544,7 @@ function getIntervalsEventType(type: WorkoutType): string | undefined {
   }
 
   if (type === 'trail-run') {
-    return 'Trail Run';
+    return 'TrailRun';
   }
 
   if (type === 'cycling') {
@@ -554,9 +555,15 @@ function getIntervalsEventType(type: WorkoutType): string | undefined {
     return 'WeightTraining';
   }
 
-  if (type === 'hiking' || type === 'other') {
-    return 'Other Workout';
+  if (type === 'hiking') {
+    return 'Hike';
   }
+
+  if (type === 'other') {
+    return 'Other';
+  }
+
+
 
   return undefined;
 }
@@ -1025,22 +1032,26 @@ function buildCalendarDayCellText(date: Date, workout: DayWorkout | undefined, u
 }
 
 function buildIntervalsEventDescription(workout: DayWorkout, unitSystem: UnitSystem): string | undefined {
-  if (isRestWorkoutType(workout.type)) {
-    return workout.notes.trim() || undefined;
-  }
+  return workout.notes.trim() || undefined;
+}
 
-  const parsedWorkout = deriveDayWorkout(workout, unitSystem);
-  const showElevation = isEnduranceWorkoutType(workout.type) && workout.elevation.trim() !== '';
-  const lines = [
+function buildIntervalsEventName(
+  workout: DayWorkout,
+  parsedWorkout: ParsedDayWorkout,
+  unitSystem: UnitSystem,
+): string {
+  const summaryParts = [
     `Z3 ${formatMinutes(parsedWorkout.z3Minutes)} / Z2 ${formatMinutes(parsedWorkout.z2Minutes)} / Z1 ${formatMinutes(parsedWorkout.z1Minutes)}`,
-    `Elevation ${showElevation ? formatElevation(parsedWorkout.elevationMeters, unitSystem) : '-'}`,
   ];
 
-  if (workout.notes.trim()) {
-    lines.push(workout.notes.trim());
+  if (isEnduranceWorkoutType(workout.type) && workout.elevation.trim() !== '') {
+    summaryParts.push(`Elevation ${formatElevation(parsedWorkout.elevationMeters, unitSystem)}`);
   }
 
-  return lines.join('\n');
+  const summary = summaryParts.join(' | ');
+  const title = workout.title.trim();
+
+  return title ? `${title} | ${summary}` : summary;
 }
 
 type IntervalsEventRequestBody = {
@@ -1075,15 +1086,12 @@ function buildIntervalsEventRequestBody(
   const payload: IntervalsEventRequestBody = {
     category: 'WORKOUT',
     start_date_local,
+    name: buildIntervalsEventName(workout, parsedWorkout, unitSystem),
     type: getIntervalsEventType(workout.type),
     moving_time: parsedWorkout.totalMinutes * 60,
     description: buildIntervalsEventDescription(workout, unitSystem),
     external_id,
   };
-
-  if (workout.title.trim()) {
-    payload.name = workout.title.trim();
-  }
 
   return payload;
 }

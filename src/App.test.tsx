@@ -40,7 +40,7 @@ vi.mock('xlsx', () => ({
 
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import App, { sanitizePlannerSnapshot } from './App';
+import App, { buildIntervalsEventRequestBody, sanitizePlannerSnapshot } from './App';
 
 beforeAll(() => {
   Object.defineProperty(URL, 'createObjectURL', {
@@ -232,6 +232,60 @@ describe('planner snapshot restore', () => {
 
     await user.click(screen.getByText('Tempo Climb'));
     expect(screen.getByDisplayValue('48566309')).toBeInTheDocument();
+  });
+});
+
+describe('intervals payload builder', () => {
+  it('puts workout summary in the title and leaves description as notes only', () => {
+    expect(
+      buildIntervalsEventRequestBody(
+        '2027-02-09',
+        {
+          title: 'Tempo Climb',
+          type: 'trail-run',
+          totalTime: '1h',
+          z3Time: '10m',
+          z2Time: '20m',
+          elevation: '300',
+          notes: 'Steady effort on the climb',
+          intervalsIcuId: '',
+        },
+        'metric',
+      ),
+    ).toMatchObject({
+      category: 'WORKOUT',
+      start_date_local: '2027-02-09T00:00:00',
+      name: 'Tempo Climb | Z3 10m / Z2 20m / Z1 30m | Elevation 300 m',
+      type: 'TrailRun',
+      moving_time: 3600,
+      description: 'Steady effort on the climb',
+      external_id: 'training-plan-overview:2027-02-09',
+    });
+  });
+
+  it('uses notes as the full description for rest days', () => {
+    expect(
+      buildIntervalsEventRequestBody(
+        '2027-02-10',
+        {
+          title: '',
+          type: 'rest',
+          totalTime: '',
+          z3Time: '',
+          z2Time: '',
+          elevation: '',
+          notes: 'Take the day completely off',
+          intervalsIcuId: '',
+        },
+        'metric',
+      ),
+    ).toMatchObject({
+      category: 'NOTE',
+      start_date_local: '2027-02-10T00:00:00',
+      name: 'Rest Day',
+      description: 'Take the day completely off',
+      external_id: 'training-plan-overview:2027-02-10',
+    });
   });
 });
 
