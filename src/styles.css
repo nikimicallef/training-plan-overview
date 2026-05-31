@@ -647,6 +647,7 @@ code {
 .form-pane {
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-gutter: stable;
   flex: 1 1 0;
   min-width: 0;
@@ -673,6 +674,7 @@ code {
 .week-design-layout {
   display: grid;
   gap: 0.7rem;
+  min-width: 0;
 }
 
 .planner-panel {
@@ -814,15 +816,20 @@ code {
 .week-design-scroller {
   overflow-x: auto;
   padding-bottom: 0.3rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .calendar-layout {
   display: grid;
+  min-width: 0;
 }
 
 .calendar-scroller {
   overflow-x: auto;
   padding-bottom: 0.4rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .calendar-table {
