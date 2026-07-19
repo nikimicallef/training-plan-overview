@@ -176,7 +176,9 @@ function createScheduledDayWorkout(id: string): ScheduledDayWorkout {
 }
 
 const DEFAULT_WEEK_COUNT = 6;
-const LEFT_AXIS_TICKS = 5;
+const TIME_AXIS_INTERVAL_MINUTES = 60;
+const DEFAULT_TIME_AXIS_MAX_MINUTES = 180;
+const WORKOUT_TITLE_MAX_LENGTH = 90;
 const RIGHT_AXIS_TICKS = 5;
 const FEET_PER_METER = 3.28084;
 const INTERVALS_BASE_URL = 'https://intervals.icu/api/v1/athlete/0/events';
@@ -651,7 +653,7 @@ function sanitizeWorkoutType(value: unknown): WorkoutType {
 }
 
 function sanitizeWorkoutTitle(value: unknown): string {
-  return sanitizeString(value).trim().slice(0, 30);
+  return sanitizeString(value).trim().slice(0, WORKOUT_TITLE_MAX_LENGTH);
 }
 
 function getWorkoutTypeLabel(type: WorkoutType): string {
@@ -1412,6 +1414,29 @@ function buildTickValues(maxValue: number, tickCount: number): number[] {
   return values;
 }
 
+function buildIntervalTickValues(maxValue: number, interval: number): number[] {
+  const safeInterval = interval <= 0 ? 1 : interval;
+  const safeMax = maxValue <= 0 ? safeInterval : maxValue;
+  const values = [];
+
+  for (let value = 0; value <= safeMax; value += safeInterval) {
+    values.push(value);
+  }
+
+  return values;
+}
+
+function getTimeAxisMax(value: number): number {
+  if (value <= 0) {
+    return DEFAULT_TIME_AXIS_MAX_MINUTES;
+  }
+
+  return Math.max(
+    DEFAULT_TIME_AXIS_MAX_MINUTES,
+    Math.ceil(value / TIME_AXIS_INTERVAL_MINUTES) * TIME_AXIS_INTERVAL_MINUTES,
+  );
+}
+
 function getNiceAxisMax(value: number): number {
   if (value <= 0) {
     return 100;
@@ -1566,10 +1591,10 @@ function Chart({
   const maxTimeValue = Math.max(...data.map((week) => Math.max(week.totalMinutes, week.longRunMinutes)), 0);
   const maxElevationValue = Math.max(...data.map((week) => week.elevationMeters), 0);
 
-  const timeAxisMax = getNiceAxisMax(maxTimeValue);
+  const timeAxisMax = getTimeAxisMax(maxTimeValue);
   const elevationAxisMax = getNiceAxisMax(maxElevationValue);
 
-  const timeTicks = buildTickValues(timeAxisMax, LEFT_AXIS_TICKS);
+  const timeTicks = buildIntervalTickValues(timeAxisMax, TIME_AXIS_INTERVAL_MINUTES);
   const elevationTicks = buildTickValues(elevationAxisMax, RIGHT_AXIS_TICKS);
 
   const getX = (index: number) => margin.left + slotWidth * index + slotWidth / 2;
@@ -1834,6 +1859,7 @@ function LegendSwatch({
 export default function App() {
   const weeksInputId = useId();
   const workspaceRef = useRef<HTMLElement | null>(null);
+  const formPaneRef = useRef<HTMLElement | null>(null);
   const idCounterRef = useRef(0);
   const chartExportRef = useRef<HTMLElement | null>(null);
   const weekDesignExportRef = useRef<HTMLDivElement | null>(null);
@@ -2053,6 +2079,7 @@ export default function App() {
         ),
       },
     }));
+    resetFormPaneHorizontalScroll();
   }
 
   function addPhaseBlock() {
@@ -2804,6 +2831,30 @@ export default function App() {
     }
   }
 
+  function resetFormPaneHorizontalScroll() {
+    const formPane = formPaneRef.current;
+
+    if (!formPane) {
+      return;
+    }
+
+    if (formPane.scrollLeft !== 0) {
+      formPane.scrollLeft = 0;
+    }
+
+    window.requestAnimationFrame(() => {
+      if (formPane.scrollLeft !== 0) {
+        formPane.scrollLeft = 0;
+      }
+    });
+
+    window.setTimeout(() => {
+      if (formPane.scrollLeft !== 0) {
+        formPane.scrollLeft = 0;
+      }
+    }, 0);
+  }
+
   useEffect(() => {
     if (!isDraggingDivider) {
       return undefined;
@@ -3006,7 +3057,12 @@ export default function App() {
           <span className="workspace-divider-grip" />
         </div>
 
-          <section className="panel form-pane">
+          <section
+            className="panel form-pane"
+            onFocusCapture={resetFormPaneHorizontalScroll}
+            onScroll={resetFormPaneHorizontalScroll}
+            ref={formPaneRef}
+          >
           <div className="form-top">
             <div className="tab-toolbar">
               <div className="tab-bar" role="tablist" aria-label="Planning modes">
@@ -4169,7 +4225,7 @@ export default function App() {
                 <span className="field-label">Title</span>
                 <input
                   className="text-input"
-                  maxLength={30}
+                  maxLength={WORKOUT_TITLE_MAX_LENGTH}
                   onChange={(event) => updateCalendarDraft('title', event.target.value)}
                   type="text"
                   value={calendarDraft.title}
