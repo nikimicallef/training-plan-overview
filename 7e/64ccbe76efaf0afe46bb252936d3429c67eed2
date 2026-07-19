@@ -1,0 +1,25 @@
+src/App.tsx
+  s_356941c5e71cd5::t_cdb05abd7b1035 1175
+  s_356941c5e71cd5::t_6bec12abfcfa25 3464,3470,3475,3804,3806
+  s_356941c5e71cd5::t_b3db90e1a4925f 183-185,192-197
+  s_356941c5e71cd5::t_8bf2440256ccbd 1029,1033,1047,1107-1109,1448,1452,1471,1598-1600,1880,2950,2954,3107,3124,3134,3565,3569,3573,3611,3615,3619,3874-3875,4172,4182
+  s_356941c5e71cd5::t_1ebd06bc49c8cd 261,373-388
+src/App.test.tsx
+  s_356941c5e71cd5::t_cdb05abd7b1035 321
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.2",
+  "base_commit_sha": "7e64ccbe76efaf0afe46bb252936d3429c67eed2",
+  "prompts": {},
+  "sessions": {
+    "s_356941c5e71cd5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7a7a-c5b9-7382-b193-0be9f5b4aa2e",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Niki Micallef <niki.micallef@umusic.com>"
+    }
+  }
+}
