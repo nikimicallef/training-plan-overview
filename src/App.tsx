@@ -2219,14 +2219,18 @@ export default function App() {
     }));
   }
 
-  function openCalendarDay(date: Date) {
-    const dateKey = formatDateKey(date);
-    const activities = scheduledWorkouts[dateKey] ?? [];
-    const selectedActivity = activities[0];
-
+  function openCalendarActivity(date: Date, activity: ScheduledDayWorkout) {
     setActiveCalendarDate(date);
-    setActiveCalendarActivityId(selectedActivity?.id ?? '');
-    setCalendarDraft(selectedActivity ?? createScheduledDayWorkout(''));
+    setActiveCalendarActivityId(activity.id);
+    setCalendarDraft(activity);
+    setCalendarDraftErrors([]);
+  }
+
+  function openNewCalendarActivity(date: Date) {
+    const id = nextGeneratedId('activity');
+    setActiveCalendarDate(date);
+    setActiveCalendarActivityId(id);
+    setCalendarDraft(createScheduledDayWorkout(id));
     setCalendarDraftErrors([]);
   }
 
@@ -2256,19 +2260,6 @@ export default function App() {
     setCalendarDraftErrors([]);
   }
 
-  function selectCalendarActivity(activity: ScheduledDayWorkout) {
-    setActiveCalendarActivityId(activity.id);
-    setCalendarDraft(activity);
-    setCalendarDraftErrors([]);
-  }
-
-  function addCalendarActivity() {
-    const id = `activity-${Date.now()}-${idCounterRef.current++}`;
-    setActiveCalendarActivityId(id);
-    setCalendarDraft(createScheduledDayWorkout(id));
-    setCalendarDraftErrors([]);
-  }
-
   function clearCalendarActivity() {
     if (!activeCalendarDateKey) {
       return;
@@ -2289,11 +2280,7 @@ export default function App() {
       else delete next[activeCalendarDateKey];
       return next;
     });
-    const remaining = (scheduledWorkouts[activeCalendarDateKey] ?? []).filter(
-      (activity) => activity.id !== activeCalendarActivityId,
-    );
-    if (remaining[0]) selectCalendarActivity(remaining[0]);
-    else addCalendarActivity();
+    closeCalendarModal();
   }
 
   function saveCalendarDay() {
@@ -2330,8 +2317,7 @@ export default function App() {
       ],
     }));
     removePendingIntervalsDelete(activeCalendarDateKey, normalizedDraft.id);
-    setActiveCalendarActivityId(normalizedDraft.id);
-    setCalendarDraft(normalizedDraft);
+    closeCalendarModal();
   }
 
   function buildCalendarWorkbookArray(): Array<Array<string>> {
@@ -3720,12 +3706,10 @@ export default function App() {
 
                             return (
                               <td className="calendar-day-cell" key={dateKey}>
-                                <button
+                                <div
                                   className={`calendar-day-button ${
                                     hasWorkout ? 'calendar-day-button-filled' : ''
                                   }`}
-                                  onClick={() => openCalendarDay(date)}
-                                  type="button"
                                 >
                                   <span className="calendar-day-heading">
                                     <span className="calendar-day-date">{date.getDate()}</span>
@@ -3733,14 +3717,17 @@ export default function App() {
                                       {date.toLocaleDateString(undefined, { month: 'short' })}
                                     </span>
                                   </span>
-                                  {hasWorkout ? (
-                                    <>
-                                      {workouts.map((workout, index) => {
-                                        const parsedWorkout = deriveDayWorkout(workout, unitSystem);
-                                        const showWorkoutElevation =
-                                          isEnduranceWorkoutType(workout.type) && workout.elevation.trim() !== '';
-                                        return (
-                                          <span className="calendar-day-activity" key={workout.id}>
+                                  {workouts.map((workout, index) => {
+                                    const parsedWorkout = deriveDayWorkout(workout, unitSystem);
+                                    const showWorkoutElevation =
+                                      isEnduranceWorkoutType(workout.type) && workout.elevation.trim() !== '';
+                                    return (
+                                      <button
+                                        className="calendar-day-activity"
+                                        key={workout.id}
+                                        onClick={() => openCalendarActivity(date, workout)}
+                                        type="button"
+                                      >
                                             {workout.title.trim() ? (
                                               <span className="calendar-day-title">
                                                 {workout.title.trim()}
@@ -3768,14 +3755,18 @@ export default function App() {
                                             {workout.notes.trim() ? (
                                               <span className="calendar-day-note">Note</span>
                                             ) : null}
-                                          </span>
-                                        );
-                                      })}
-                                    </>
-                                  ) : (
-                                    <span className="calendar-day-add">Add</span>
-                                  )}
-                                </button>
+                                      </button>
+                                    );
+                                  })}
+                                  <button
+                                    aria-label={`Add activity on ${formatCalendarDate(date)}`}
+                                    className="calendar-day-add"
+                                    onClick={() => openNewCalendarActivity(date)}
+                                    type="button"
+                                  >
+                                    +
+                                  </button>
+                                </div>
                               </td>
                             );
                           })}
@@ -3924,24 +3915,6 @@ export default function App() {
               <button className="modal-close" onClick={closeInstructionsModal} type="button">
                 x
               </button>
-            </div>
-
-            <div className="modal-actions">
-              <div className="modal-actions-right">
-                {(scheduledWorkouts[activeCalendarDateKey] ?? []).map((activity, index) => (
-                  <button
-                    className={activity.id === activeCalendarActivityId ? 'primary-button' : 'secondary-button'}
-                    key={activity.id}
-                    onClick={() => selectCalendarActivity(activity)}
-                    type="button"
-                  >
-                    {activity.title.trim() || `Activity ${index + 1}`}
-                  </button>
-                ))}
-                <button className="secondary-button" onClick={addCalendarActivity} type="button">
-                  Add Activity
-                </button>
-              </div>
             </div>
 
             <div className="instructions-copy">

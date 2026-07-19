@@ -920,16 +920,6 @@ code {
   border: 0;
   background: rgba(39, 83, 116, 0.72);
   text-align: left;
-  cursor: pointer;
-  transition:
-    background-color 140ms ease,
-    transform 140ms ease;
-}
-
-.calendar-day-button:hover,
-.calendar-day-button:focus-visible {
-  outline: none;
-  background: rgba(227, 154, 95, 0.18);
 }
 
 .calendar-day-button-filled {
@@ -973,13 +963,24 @@ code {
 
 .calendar-day-activity {
   display: block;
+  width: 100%;
   margin-top: 0.45rem;
   padding-top: 0.1rem;
+  border: 0;
   border-top: 1px solid rgba(82, 96, 82, 0.18);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
 .calendar-day-activity:first-of-type {
   border-top: 0;
+}
+
+.calendar-day-activity:hover,
+.calendar-day-activity:focus-visible {
+  outline: none;
+  background: rgba(227, 154, 95, 0.14);
 }
 
 .calendar-day-type {
@@ -1000,6 +1001,27 @@ code {
 .calendar-day-add {
   display: block;
   margin-top: 0.18rem;
+}
+
+.calendar-day-add {
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 1.55rem;
+  font-weight: 300;
+  line-height: 1;
+  color: var(--ink);
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.calendar-day-add:hover,
+.calendar-day-add:focus-visible {
+  outline: none;
+  opacity: 1;
+  color: var(--accent);
 }
 
 .calendar-day-note {
