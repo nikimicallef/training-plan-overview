@@ -964,6 +964,17 @@ code {
   overflow-wrap: anywhere;
 }
 
+.calendar-day-activity {
+  display: block;
+  margin-top: 0.45rem;
+  padding-top: 0.1rem;
+  border-top: 1px solid rgba(82, 96, 82, 0.18);
+}
+
+.calendar-day-activity:first-of-type {
+  border-top: 0;
+}
+
 .calendar-day-type {
   display: block;
   margin-top: 0.18rem;

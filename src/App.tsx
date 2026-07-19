@@ -88,8 +88,13 @@ type DayWorkout = {
   intervalsIcuId: string;
 };
 
+type ScheduledDayWorkout = DayWorkout & {
+  id: string;
+};
+
 type PendingIntervalsDelete = {
   dateKey: string;
+  activityId: string;
   intervalsIcuId: string;
 };
 
@@ -133,7 +138,7 @@ type PlannerSnapshot = {
   weeksInput: string;
   weeks: WeekFormState[];
   weekDesign: WeekDesignState;
-  scheduledWorkouts: Record<string, DayWorkout>;
+  scheduledWorkouts: Record<string, ScheduledDayWorkout[]>;
   pendingIntervalsDeletes: PendingIntervalsDelete[];
 };
 
@@ -165,6 +170,10 @@ const EMPTY_DAY_WORKOUT: DayWorkout = {
   notes: '',
   intervalsIcuId: '',
 };
+
+function createScheduledDayWorkout(id: string): ScheduledDayWorkout {
+  return { ...EMPTY_DAY_WORKOUT, id };
+}
 
 const DEFAULT_WEEK_COUNT = 6;
 const LEFT_AXIS_TICKS = 5;
@@ -661,8 +670,10 @@ function isRestWorkoutType(type: WorkoutType): boolean {
   return type === 'rest';
 }
 
-function getIntervalsExternalId(dateKey: string): string {
-  return `training-plan-overview:${dateKey}`;
+function getIntervalsExternalId(dateKey: string, activityId = 'legacy-1'): string {
+  return activityId === 'legacy-1'
+    ? `training-plan-overview:${dateKey}`
+    : `training-plan-overview:${dateKey}:${activityId}`;
 }
 
 function getIntervalsEventType(type: WorkoutType): string | undefined {
@@ -796,7 +807,7 @@ function sanitizePendingIntervalsDeletes(value: unknown): PendingIntervalsDelete
     return [];
   }
 
-  const seenDateKeys = new Set<string>();
+  const seenActivityKeys = new Set<string>();
 
   return value
     .map((entry) => {
@@ -805,16 +816,19 @@ function sanitizePendingIntervalsDeletes(value: unknown): PendingIntervalsDelete
       }
 
       const dateKey = sanitizeString(entry.dateKey);
+      const activityId = sanitizeString(entry.activityId) || 'legacy-1';
       const intervalsIcuId = sanitizeIntervalsIcuId(entry.intervalsIcuId);
 
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || !intervalsIcuId || seenDateKeys.has(dateKey)) {
+      const activityKey = `${dateKey}:${activityId}`;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || !intervalsIcuId || seenActivityKeys.has(activityKey)) {
         return null;
       }
 
-      seenDateKeys.add(dateKey);
+      seenActivityKeys.add(activityKey);
 
       return {
         dateKey,
+        activityId,
         intervalsIcuId,
       };
     })
@@ -862,7 +876,7 @@ function sanitizeWeekDesignState(value: unknown, weekCount: number): WeekDesignS
   };
 }
 
-function sanitizeScheduledWorkouts(value: unknown): Record<string, DayWorkout> {
+function sanitizeScheduledWorkouts(value: unknown): Record<string, ScheduledDayWorkout[]> {
   if (!isRecord(value)) {
     return {};
   }
@@ -870,7 +884,13 @@ function sanitizeScheduledWorkouts(value: unknown): Record<string, DayWorkout> {
   return Object.fromEntries(
     Object.entries(value)
       .filter(([key]) => /^\d{4}-\d{2}-\d{2}$/.test(key))
-      .map(([key, workout]) => [key, sanitizeDayWorkout(workout)]),
+      .map(([key, workouts]) => [
+        key,
+        (Array.isArray(workouts) ? workouts : [workouts]).map((workout, index) => ({
+          ...sanitizeDayWorkout(workout),
+          id: isRecord(workout) && sanitizeString(workout.id) ? sanitizeString(workout.id) : `legacy-${index + 1}`,
+        })),
+      ]),
   );
 }
 
@@ -1061,27 +1081,23 @@ function deriveDayWorkout(workout: DayWorkout, unitSystem: UnitSystem): ParsedDa
 
 function summarizeWeekSchedule(
   weekDates: Date[],
-  workoutsByDate: Record<string, DayWorkout>,
+  workoutsByDate: Record<string, ScheduledDayWorkout[]>,
   unitSystem: UnitSystem,
 ): WeekScheduleSummary {
   return weekDates.reduce(
     (summary, date) => {
-      const workout = workoutsByDate[formatDateKey(date)];
-
-      if (!workout || !hasDayWorkoutContent(workout)) {
-        return summary;
-      }
-
-      const parsedWorkout = deriveDayWorkout(workout, unitSystem);
-
-      return {
-        totalMinutes: summary.totalMinutes + parsedWorkout.totalMinutes,
-        z1Minutes: summary.z1Minutes + parsedWorkout.z1Minutes,
-        z2Minutes: summary.z2Minutes + parsedWorkout.z2Minutes,
-        z3Minutes: summary.z3Minutes + parsedWorkout.z3Minutes,
-        elevationMeters: summary.elevationMeters + parsedWorkout.elevationMeters,
-        workoutCount: summary.workoutCount + (isRestWorkoutType(workout.type) ? 0 : 1),
-      };
+      return (workoutsByDate[formatDateKey(date)] ?? []).reduce((next, workout) => {
+        if (!hasDayWorkoutContent(workout)) return next;
+        const parsedWorkout = deriveDayWorkout(workout, unitSystem);
+        return {
+          totalMinutes: next.totalMinutes + parsedWorkout.totalMinutes,
+          z1Minutes: next.z1Minutes + parsedWorkout.z1Minutes,
+          z2Minutes: next.z2Minutes + parsedWorkout.z2Minutes,
+          z3Minutes: next.z3Minutes + parsedWorkout.z3Minutes,
+          elevationMeters: next.elevationMeters + parsedWorkout.elevationMeters,
+          workoutCount: next.workoutCount + (isRestWorkoutType(workout.type) ? 0 : 1),
+        };
+      }, summary);
     },
     {
       totalMinutes: 0,
@@ -1126,38 +1142,29 @@ function buildDayWorkoutMetricLine(parsedWorkout: ParsedDayWorkout): string {
   ].join(' / ');
 }
 
-function buildCalendarDayCellText(date: Date, workout: DayWorkout | undefined, unitSystem: UnitSystem): string {
+function buildCalendarDayCellText(date: Date, workouts: ScheduledDayWorkout[] | undefined, unitSystem: UnitSystem): string {
   const lines = [formatShortDate(date)];
+  const populatedWorkouts = (workouts ?? []).filter(hasDayWorkoutContent);
 
-  if (!workout || !hasDayWorkoutContent(workout)) {
+  if (populatedWorkouts.length === 0) {
     lines.push('No workout');
     return lines.join('\n');
   }
 
-  if (workout.title.trim()) {
-    lines.push(workout.title.trim());
-  }
-
-  const typeLabel = getWorkoutTypeLabel(workout.type);
-  if (typeLabel) {
-    lines.push(typeLabel);
-  }
-
-  if (!isRestWorkoutType(workout.type)) {
-    const parsedWorkout = deriveDayWorkout(workout, unitSystem);
-    const showElevation = isEnduranceWorkoutType(workout.type) && workout.elevation.trim() !== '';
-
-    lines.push(buildDayWorkoutMetricLine(parsedWorkout));
-    lines.push(showElevation ? formatElevation(parsedWorkout.elevationMeters, unitSystem) : '-');
-  }
-
-  if (workout.notes.trim()) {
-    lines.push(`Notes: ${workout.notes.trim()}`);
-  }
-
-  if (workout.intervalsIcuId) {
-    lines.push(`ICU ${workout.intervalsIcuId}`);
-  }
+  populatedWorkouts.forEach((workout, index) => {
+    if (index > 0) lines.push('');
+    if (workout.title.trim()) lines.push(workout.title.trim());
+    const typeLabel = getWorkoutTypeLabel(workout.type);
+    if (typeLabel) lines.push(typeLabel);
+    if (!isRestWorkoutType(workout.type)) {
+      const parsedWorkout = deriveDayWorkout(workout, unitSystem);
+      const showElevation = isEnduranceWorkoutType(workout.type) && workout.elevation.trim() !== '';
+      lines.push(buildDayWorkoutMetricLine(parsedWorkout));
+      lines.push(showElevation ? formatElevation(parsedWorkout.elevationMeters, unitSystem) : '-');
+    }
+    if (workout.notes.trim()) lines.push(`Notes: ${workout.notes.trim()}`);
+    if (workout.intervalsIcuId) lines.push(`ICU ${workout.intervalsIcuId}`);
+  });
 
   return lines.join('\n');
 }
@@ -1197,11 +1204,11 @@ type IntervalsEventRequestBody = {
 
 function buildIntervalsEventRequestBody(
   dateKey: string,
-  workout: DayWorkout,
+  workout: DayWorkout & { id?: string },
   unitSystem: UnitSystem,
 ): IntervalsEventRequestBody {
   const start_date_local = `${dateKey}T00:00:00`;
-  const external_id = getIntervalsExternalId(dateKey);
+  const external_id = getIntervalsExternalId(dateKey, workout.id);
 
   if (isRestWorkoutType(workout.type)) {
     return {
@@ -1836,14 +1843,15 @@ export default function App() {
   const [weekDesign, setWeekDesign] = useState<WeekDesignState>(() =>
     createInitialWeekDesign(DEFAULT_WEEK_COUNT),
   );
-  const [scheduledWorkouts, setScheduledWorkouts] = useState<Record<string, DayWorkout>>({});
+  const [scheduledWorkouts, setScheduledWorkouts] = useState<Record<string, ScheduledDayWorkout[]>>({});
   const [pendingIntervalsDeletes, setPendingIntervalsDeletes] = useState<PendingIntervalsDelete[]>([]);
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('metric');
   const [splitPercent, setSplitPercent] = useState(50);
   const [isDraggingDivider, setIsDraggingDivider] = useState(false);
   const [activeTab, setActiveTab] = useState<PlannerTab>('week');
   const [activeCalendarDate, setActiveCalendarDate] = useState<Date | null>(null);
-  const [calendarDraft, setCalendarDraft] = useState<DayWorkout>({ ...EMPTY_DAY_WORKOUT });
+  const [calendarDraft, setCalendarDraft] = useState<ScheduledDayWorkout>(() => createScheduledDayWorkout(''));
+  const [activeCalendarActivityId, setActiveCalendarActivityId] = useState('');
   const [calendarDraftErrors, setCalendarDraftErrors] = useState<string[]>([]);
   const [phaseBlockError, setPhaseBlockError] = useState('');
   const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
@@ -1915,28 +1923,33 @@ export default function App() {
     }));
   }
 
-  function getPendingIntervalsDelete(dateKey: string): PendingIntervalsDelete | undefined {
-    return pendingIntervalsDeletes.find((entry) => entry.dateKey === dateKey);
+  function getPendingIntervalsDelete(dateKey: string, activityId: string): PendingIntervalsDelete | undefined {
+    return pendingIntervalsDeletes.find(
+      (entry) => entry.dateKey === dateKey && entry.activityId === activityId,
+    );
   }
 
-  function queueIntervalsDelete(dateKey: string, intervalsIcuId: string) {
+  function queueIntervalsDelete(dateKey: string, activityId: string, intervalsIcuId: string) {
     if (!intervalsIcuId) {
       return;
     }
 
     setPendingIntervalsDeletes((previous) => {
-      const next = previous.filter((entry) => entry.dateKey !== dateKey);
+      const next = previous.filter(
+        (entry) => entry.dateKey !== dateKey || entry.activityId !== activityId,
+      );
       next.push({
         dateKey,
+        activityId,
         intervalsIcuId,
       });
       return next;
     });
   }
 
-  function removePendingIntervalsDelete(dateKey: string) {
+  function removePendingIntervalsDelete(dateKey: string, activityId: string) {
     setPendingIntervalsDeletes((previous) =>
-      previous.filter((entry) => entry.dateKey !== dateKey),
+      previous.filter((entry) => entry.dateKey !== dateKey || entry.activityId !== activityId),
     );
   }
 
@@ -1953,12 +1966,12 @@ export default function App() {
     );
     setScheduledWorkouts((previous) =>
       Object.fromEntries(
-        Object.entries(previous).map(([dateKey, workout]) => [
+        Object.entries(previous).map(([dateKey, workouts]) => [
           dateKey,
-          {
+          workouts.map((workout) => ({
             ...workout,
             elevation: convertElevationInputValue(workout.elevation, unitSystem, nextUnitSystem),
-          },
+          })),
         ]),
       ),
     );
@@ -2181,21 +2194,19 @@ export default function App() {
 
   function openCalendarDay(date: Date) {
     const dateKey = formatDateKey(date);
-    const queuedDelete = getPendingIntervalsDelete(dateKey);
+    const activities = scheduledWorkouts[dateKey] ?? [];
+    const selectedActivity = activities[0];
 
     setActiveCalendarDate(date);
-    setCalendarDraft(
-      scheduledWorkouts[dateKey] ?? {
-        ...EMPTY_DAY_WORKOUT,
-        intervalsIcuId: queuedDelete?.intervalsIcuId ?? '',
-      },
-    );
+    setActiveCalendarActivityId(selectedActivity?.id ?? '');
+    setCalendarDraft(selectedActivity ?? createScheduledDayWorkout(''));
     setCalendarDraftErrors([]);
   }
 
   function closeCalendarModal() {
     setActiveCalendarDate(null);
-    setCalendarDraft({ ...EMPTY_DAY_WORKOUT });
+    setActiveCalendarActivityId('');
+    setCalendarDraft(createScheduledDayWorkout(''));
     setCalendarDraftErrors([]);
   }
 
@@ -2218,25 +2229,44 @@ export default function App() {
     setCalendarDraftErrors([]);
   }
 
-  function clearCalendarDay() {
+  function selectCalendarActivity(activity: ScheduledDayWorkout) {
+    setActiveCalendarActivityId(activity.id);
+    setCalendarDraft(activity);
+    setCalendarDraftErrors([]);
+  }
+
+  function addCalendarActivity() {
+    const id = `activity-${Date.now()}-${idCounterRef.current++}`;
+    setActiveCalendarActivityId(id);
+    setCalendarDraft(createScheduledDayWorkout(id));
+    setCalendarDraftErrors([]);
+  }
+
+  function clearCalendarActivity() {
     if (!activeCalendarDateKey) {
       return;
     }
 
-    const existingWorkout = scheduledWorkouts[activeCalendarDateKey];
-    const intervalsIcuId =
-      existingWorkout?.intervalsIcuId || calendarDraft.intervalsIcuId || '';
+    const intervalsIcuId = calendarDraft.intervalsIcuId;
 
     if (intervalsIcuId) {
-      queueIntervalsDelete(activeCalendarDateKey, intervalsIcuId);
+      queueIntervalsDelete(activeCalendarDateKey, activeCalendarActivityId, intervalsIcuId);
     }
 
     setScheduledWorkouts((previous) => {
       const next = { ...previous };
-      delete next[activeCalendarDateKey];
+      const remaining = (next[activeCalendarDateKey] ?? []).filter(
+        (activity) => activity.id !== activeCalendarActivityId,
+      );
+      if (remaining.length > 0) next[activeCalendarDateKey] = remaining;
+      else delete next[activeCalendarDateKey];
       return next;
     });
-    closeCalendarModal();
+    const remaining = (scheduledWorkouts[activeCalendarDateKey] ?? []).filter(
+      (activity) => activity.id !== activeCalendarActivityId,
+    );
+    if (remaining[0]) selectCalendarActivity(remaining[0]);
+    else addCalendarActivity();
   }
 
   function saveCalendarDay() {
@@ -2244,18 +2274,14 @@ export default function App() {
       return;
     }
 
-    const normalizedDraft: DayWorkout = {
+    const normalizedDraft: ScheduledDayWorkout = {
       ...calendarDraft,
       title: sanitizeWorkoutTitle(calendarDraft.title),
       type: calendarDraft.type,
       z3Time: isEnduranceWorkoutType(calendarDraft.type) ? calendarDraft.z3Time : '',
       z2Time: isEnduranceWorkoutType(calendarDraft.type) ? calendarDraft.z2Time : '',
       elevation: isEnduranceWorkoutType(calendarDraft.type) ? calendarDraft.elevation : '',
-      intervalsIcuId:
-        scheduledWorkouts[activeCalendarDateKey]?.intervalsIcuId ||
-        calendarDraft.intervalsIcuId ||
-        getPendingIntervalsDelete(activeCalendarDateKey)?.intervalsIcuId ||
-        '',
+      intervalsIcuId: calendarDraft.intervalsIcuId,
     };
     const parsedWorkout = deriveDayWorkout(normalizedDraft, unitSystem);
 
@@ -2265,24 +2291,20 @@ export default function App() {
     }
 
     if (!hasDayWorkoutContent(normalizedDraft)) {
-      if (normalizedDraft.intervalsIcuId) {
-        queueIntervalsDelete(activeCalendarDateKey, normalizedDraft.intervalsIcuId);
-      }
-      setScheduledWorkouts((previous) => {
-        const next = { ...previous };
-        delete next[activeCalendarDateKey];
-        return next;
-      });
-      closeCalendarModal();
+      clearCalendarActivity();
       return;
     }
 
     setScheduledWorkouts((previous) => ({
       ...previous,
-      [activeCalendarDateKey]: normalizedDraft,
+      [activeCalendarDateKey]: [
+        ...(previous[activeCalendarDateKey] ?? []).filter((activity) => activity.id !== normalizedDraft.id),
+        normalizedDraft,
+      ],
     }));
-    removePendingIntervalsDelete(activeCalendarDateKey);
-    closeCalendarModal();
+    removePendingIntervalsDelete(activeCalendarDateKey, normalizedDraft.id);
+    setActiveCalendarActivityId(normalizedDraft.id);
+    setCalendarDraft(normalizedDraft);
   }
 
   function buildCalendarWorkbookArray(): Array<Array<string>> {
@@ -2459,47 +2481,42 @@ export default function App() {
           kind: 'upsert';
           dateKey: string;
           mode: 'create' | 'update';
-          workout: DayWorkout;
+          workout: ScheduledDayWorkout;
         }
       | {
           kind: 'delete';
           dateKey: string;
+          activityId: string;
           intervalsIcuId: string;
         };
 
     const sortedDateKeys = Array.from(visibleCalendarDateKeys).sort();
     const operations: IntervalsOperation[] = [
       ...sortedDateKeys.flatMap((dateKey) => {
-        const workout = scheduledWorkouts[dateKey];
-
-        if (!workout || !hasDayWorkoutContent(workout)) {
-          return [];
-        }
-
-        const queuedDelete = getPendingIntervalsDelete(dateKey);
-        const intervalsIcuId = workout.intervalsIcuId || queuedDelete?.intervalsIcuId || '';
-
-        return [
-          {
-            kind: 'upsert' as const,
-            dateKey,
-            mode: (intervalsIcuId ? 'update' : 'create') as 'create' | 'update',
-            workout: {
-              ...workout,
-              intervalsIcuId,
-            },
-          },
-        ];
+        return (scheduledWorkouts[dateKey] ?? [])
+          .filter(hasDayWorkoutContent)
+          .map((workout) => {
+            const queuedDelete = getPendingIntervalsDelete(dateKey, workout.id);
+            const intervalsIcuId = workout.intervalsIcuId || queuedDelete?.intervalsIcuId || '';
+            return {
+              kind: 'upsert' as const,
+              dateKey,
+              mode: (intervalsIcuId ? 'update' : 'create') as 'create' | 'update',
+              workout: { ...workout, intervalsIcuId },
+            };
+          });
       }),
       ...pendingIntervalsDeletes
         .filter(
           (entry) =>
-            visibleCalendarDateKeys.has(entry.dateKey) && !scheduledWorkouts[entry.dateKey],
+            visibleCalendarDateKeys.has(entry.dateKey) &&
+            !(scheduledWorkouts[entry.dateKey] ?? []).some((workout) => workout.id === entry.activityId),
         )
         .sort((left, right) => left.dateKey.localeCompare(right.dateKey))
         .map((entry) => ({
           kind: 'delete' as const,
           dateKey: entry.dateKey,
+          activityId: entry.activityId,
           intervalsIcuId: entry.intervalsIcuId,
         })),
     ];
@@ -2546,7 +2563,8 @@ export default function App() {
 
           deleted += 1;
           nextPendingIntervalsDeletes = nextPendingIntervalsDeletes.filter(
-            (entry) => entry.dateKey !== operation.dateKey,
+            (entry) =>
+              entry.dateKey !== operation.dateKey || entry.activityId !== operation.activityId,
           );
         } else {
           const validationErrors = deriveDayWorkout(operation.workout, unitSystem).errors;
@@ -2605,12 +2623,15 @@ export default function App() {
             };
           }
 
-          nextScheduledWorkouts[operation.dateKey] = {
-            ...operation.workout,
-            intervalsIcuId: nextIntervalsIcuId,
-          };
+          nextScheduledWorkouts[operation.dateKey] = (nextScheduledWorkouts[operation.dateKey] ?? []).map(
+            (workout) =>
+              workout.id === operation.workout.id
+                ? { ...workout, intervalsIcuId: nextIntervalsIcuId }
+                : workout,
+          );
           nextPendingIntervalsDeletes = nextPendingIntervalsDeletes.filter(
-            (entry) => entry.dateKey !== operation.dateKey,
+            (entry) =>
+              entry.dateKey !== operation.dateKey || entry.activityId !== operation.workout.id,
           );
 
           if (savedAs === 'create') {
@@ -3638,14 +3659,8 @@ export default function App() {
 
                           {weekDates.map((date) => {
                             const dateKey = formatDateKey(date);
-                            const workout = scheduledWorkouts[dateKey];
-                            const parsedWorkout = workout ? deriveDayWorkout(workout, unitSystem) : null;
-                            const hasWorkout = workout ? hasDayWorkoutContent(workout) : false;
-                            const workoutTypeLabel = workout ? getWorkoutTypeLabel(workout.type) : '';
-                            const showWorkoutElevation =
-                              !!workout &&
-                              isEnduranceWorkoutType(workout.type) &&
-                              workout.elevation.trim() !== '';
+                            const workouts = (scheduledWorkouts[dateKey] ?? []).filter(hasDayWorkoutContent);
+                            const hasWorkout = workouts.length > 0;
 
                             return (
                               <td className="calendar-day-cell" key={dateKey}>
@@ -3662,29 +3677,44 @@ export default function App() {
                                       {date.toLocaleDateString(undefined, { month: 'short' })}
                                     </span>
                                   </span>
-                                  {hasWorkout && parsedWorkout ? (
+                                  {hasWorkout ? (
                                     <>
-                                      {workout?.title.trim() ? (
-                                        <span className="calendar-day-title">{workout.title.trim()}</span>
-                                      ) : null}
-                                      {workoutTypeLabel ? (
-                                        <span className="calendar-day-type">{workoutTypeLabel}</span>
-                                      ) : null}
-                                      {!isRestWorkoutType(workout?.type ?? '') ? (
-                                        <>
-                                          <span className="calendar-day-metric">
-                                            {buildDayWorkoutMetricLine(parsedWorkout)}
+                                      {workouts.map((workout, index) => {
+                                        const parsedWorkout = deriveDayWorkout(workout, unitSystem);
+                                        const showWorkoutElevation =
+                                          isEnduranceWorkoutType(workout.type) && workout.elevation.trim() !== '';
+                                        return (
+                                          <span className="calendar-day-activity" key={workout.id}>
+                                            {workout.title.trim() ? (
+                                              <span className="calendar-day-title">
+                                                {workout.title.trim()}
+                                              </span>
+                                            ) : (
+                                              <span className="calendar-day-title">Activity {index + 1}</span>
+                                            )}
+                                            {getWorkoutTypeLabel(workout.type) ? (
+                                              <span className="calendar-day-type">
+                                                {getWorkoutTypeLabel(workout.type)}
+                                              </span>
+                                            ) : null}
+                                            {!isRestWorkoutType(workout.type) ? (
+                                              <>
+                                                <span className="calendar-day-metric">
+                                                  {buildDayWorkoutMetricLine(parsedWorkout)}
+                                                </span>
+                                                <span className="calendar-day-submetric">
+                                                  {showWorkoutElevation
+                                                    ? formatElevation(parsedWorkout.elevationMeters, unitSystem)
+                                                    : '-'}
+                                                </span>
+                                              </>
+                                            ) : null}
+                                            {workout.notes.trim() ? (
+                                              <span className="calendar-day-note">Note</span>
+                                            ) : null}
                                           </span>
-                                          <span className="calendar-day-submetric">
-                                            {showWorkoutElevation
-                                              ? formatElevation(parsedWorkout.elevationMeters, unitSystem)
-                                              : '-'}
-                                          </span>
-                                        </>
-                                      ) : null}
-                                      {workout?.notes.trim() ? (
-                                        <span className="calendar-day-note">Note</span>
-                                      ) : null}
+                                        );
+                                      })}
                                     </>
                                   ) : (
                                     <span className="calendar-day-add">Add</span>
@@ -3838,6 +3868,24 @@ export default function App() {
               <button className="modal-close" onClick={closeInstructionsModal} type="button">
                 x
               </button>
+            </div>
+
+            <div className="modal-actions">
+              <div className="modal-actions-right">
+                {(scheduledWorkouts[activeCalendarDateKey] ?? []).map((activity, index) => (
+                  <button
+                    className={activity.id === activeCalendarActivityId ? 'primary-button' : 'secondary-button'}
+                    key={activity.id}
+                    onClick={() => selectCalendarActivity(activity)}
+                    type="button"
+                  >
+                    {activity.title.trim() || `Activity ${index + 1}`}
+                  </button>
+                ))}
+                <button className="secondary-button" onClick={addCalendarActivity} type="button">
+                  Add Activity
+                </button>
+              </div>
             </div>
 
             <div className="instructions-copy">
@@ -4233,15 +4281,15 @@ export default function App() {
             ) : null}
 
             <div className="modal-actions">
-              <button className="icon-button" onClick={clearCalendarDay} type="button">
-                Clear Day
+              <button className="icon-button" onClick={clearCalendarActivity} type="button">
+                Remove Activity
               </button>
               <div className="modal-actions-right">
                 <button className="secondary-button" onClick={closeCalendarModal} type="button">
                   Cancel
                 </button>
                 <button className="primary-button" onClick={saveCalendarDay} type="button">
-                  Save Workout
+                  Save Activity
                 </button>
               </div>
             </div>

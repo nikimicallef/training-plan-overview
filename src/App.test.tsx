@@ -72,6 +72,26 @@ function readBlobText(blob: Blob): Promise<string> {
 }
 
 describe('planner snapshot restore', () => {
+  it('supports multiple activities per day while keeping legacy single-activity data readable', () => {
+    const snapshot = sanitizePlannerSnapshot({
+      version: 1,
+      weeksInput: '1',
+      weeks: [],
+      weekDesign: {},
+      scheduledWorkouts: {
+        '2027-02-08': [
+          { id: 'morning-run', type: 'road-run', totalTime: '1h' },
+          { id: 'evening-strength', type: 'strength', totalTime: '30m' },
+        ],
+        '2027-02-09': { type: 'trail-run', totalTime: '2h' },
+      },
+    });
+
+    expect(snapshot?.scheduledWorkouts['2027-02-08']).toHaveLength(2);
+    expect(snapshot?.scheduledWorkouts['2027-02-08']?.[1]?.id).toBe('evening-strength');
+    expect(snapshot?.scheduledWorkouts['2027-02-09']?.[0]?.id).toBe('legacy-1');
+  });
+
   it('sanitizes partial snapshot data with nulls and infers week count', () => {
     const snapshot = sanitizePlannerSnapshot({
       version: 1,
@@ -130,7 +150,8 @@ describe('planner snapshot restore', () => {
     expect(snapshot?.weekDesign.focusRows[0].abbreviation).toBe('R');
     expect(snapshot?.weekDesign.phaseBlocks[0].abbreviation).toBe('BA');
     expect(snapshot?.weekDesign.phaseBlocks[0].color).toBe('#275374');
-    expect(snapshot?.scheduledWorkouts['2026-10-29']).toEqual({
+    expect(snapshot?.scheduledWorkouts['2026-10-29']).toEqual([{
+      id: 'legacy-1',
       title: '',
       type: 'rest',
       totalTime: '',
@@ -139,11 +160,11 @@ describe('planner snapshot restore', () => {
       elevation: '',
       notes: '',
       intervalsIcuId: '',
-    });
-    expect(snapshot?.scheduledWorkouts['2026-10-30']?.type).toBe('road-run');
-    expect(snapshot?.scheduledWorkouts['2026-10-30']?.intervalsIcuId).toBe('48566307');
+    }]);
+    expect(snapshot?.scheduledWorkouts['2026-10-30']?.[0]?.type).toBe('road-run');
+    expect(snapshot?.scheduledWorkouts['2026-10-30']?.[0]?.intervalsIcuId).toBe('48566307');
     expect(snapshot?.pendingIntervalsDeletes).toEqual([
-      { dateKey: '2026-10-31', intervalsIcuId: '48566308' },
+      { dateKey: '2026-10-31', activityId: 'legacy-1', intervalsIcuId: '48566308' },
     ]);
   });
 
