@@ -318,7 +318,7 @@ describe('intervals payload builder', () => {
     ).toMatchObject({
       category: 'WORKOUT',
       start_date_local: '2027-02-09T00:00:00',
-      name: 'Tempo Climb | Z3 10m / Z2 20m / Z1 30m | Elevation 300 m',
+      name: 'Tempo Climb | Z4+ 10m / Z3 20m / Z1-2 30m | Elevation 300 m',
       type: 'TrailRun',
       moving_time: 3600,
       description: 'Steady effort on the climb',

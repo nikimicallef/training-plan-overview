@@ -180,14 +180,21 @@ const BORN_ON_THE_TRAIL_COACHING_URL =
   `https://bornonthetrail.substack.com/p/coaching?${BORN_ON_THE_TRAIL_REFERRAL_QUERY}`;
 const DEFAULT_FOCUS_ROWS: FocusRow[] = [
   { id: 'recovery', label: 'Recovery', abbreviation: 'R', isCustom: false },
-  { id: 'z1-focus', label: 'Z1', abbreviation: 'Z1', isCustom: false },
-  { id: 'z2-focus', label: 'Z2', abbreviation: 'Z2', isCustom: false },
-  { id: 'z3-focus', label: 'Z3', abbreviation: 'Z3', isCustom: false },
+  { id: 'z1-focus', label: 'Z1-2', abbreviation: 'Z1-2', isCustom: false },
+  { id: 'z2-focus', label: 'Z3', abbreviation: 'Z3', isCustom: false },
+  { id: 'z3-focus', label: 'Z4+', abbreviation: 'Z4+', isCustom: false },
   { id: 'cross-training', label: 'Cross Training', abbreviation: 'XT', isCustom: false },
   { id: 'strength', label: 'Strength', abbreviation: 'ST', isCustom: false },
   { id: 'taper', label: 'Taper', abbreviation: 'TA', isCustom: false },
   { id: 'testing', label: 'Testing', abbreviation: 'TE', isCustom: false },
 ];
+
+// Keep these keys aligned with saved plans for backwards compatibility; only their labels change.
+const ZONE_LABELS = {
+  z1: 'Z1-2',
+  z2: 'Z3',
+  z3: 'Z4+',
+} as const;
 
 const COLORS = {
   z1: '#9bd2ff',
@@ -251,7 +258,7 @@ function getEventGradeBandColor(grade: EventGrade): string | null {
 }
 
 function sanitizeAbbreviation(value: unknown): string {
-  return sanitizeString(value).trim().slice(0, 2).toUpperCase();
+  return sanitizeString(value).trim().slice(0, 4).toUpperCase();
 }
 
 function sanitizePhaseColor(value: unknown, fallback: string): string {
@@ -361,6 +368,24 @@ function getCandidatePhaseBlockRange(
 function getDefaultFocusAbbreviation(id: string, label: string): string {
   const matchedDefault = DEFAULT_FOCUS_ROWS.find((row) => row.id === id || row.label === label);
   return matchedDefault?.abbreviation ?? '';
+}
+
+function getFocusRowDisplayLabel(row: FocusRow): string {
+  if (!row.isCustom && row.id === 'z1-focus') return ZONE_LABELS.z1;
+  if (!row.isCustom && row.id === 'z2-focus') return ZONE_LABELS.z2;
+  if (!row.isCustom && row.id === 'z3-focus') return ZONE_LABELS.z3;
+  return row.label;
+}
+
+function getFocusRowDisplayAbbreviation(row: FocusRow): string {
+  const legacyAbbreviations: Record<string, string> = {
+    'z1-focus': 'Z1',
+    'z2-focus': 'Z2',
+    'z3-focus': 'Z3',
+  };
+  const legacyAbbreviation = legacyAbbreviations[row.id];
+
+  return !row.isCustom && legacyAbbreviation === row.abbreviation ? getFocusRowDisplayLabel(row) : row.abbreviation;
 }
 
 function resizeWeeks(count: number, previous: WeekFormState[]): WeekFormState[] {
@@ -1001,11 +1026,11 @@ function deriveDayWorkout(workout: DayWorkout, unitSystem: UnitSystem): ParsedDa
   }
 
   if (isEnduranceWorkoutType(workout.type) && z3Minutes === null) {
-    errors.push('Time in Z3 must use the format Xh Ym.');
+    errors.push(`Time in ${ZONE_LABELS.z3} must use the format Xh Ym.`);
   }
 
   if (isEnduranceWorkoutType(workout.type) && z2Minutes === null) {
-    errors.push('Time in Z2 must use the format Xh Ym.');
+    errors.push(`Time in ${ZONE_LABELS.z2} must use the format Xh Ym.`);
   }
 
   if (isEnduranceWorkoutType(workout.type) && elevationValue === null) {
@@ -1019,7 +1044,7 @@ function deriveDayWorkout(workout: DayWorkout, unitSystem: UnitSystem): ParsedDa
   const safeElevation = unitSystem === 'imperial' ? feetToMeters(safeElevationValue) : safeElevationValue;
 
   if (isEnduranceWorkoutType(workout.type) && safeZ2 + safeZ3 > safeTotal) {
-    errors.push('Time in Z2 + Z3 cannot exceed total time.');
+    errors.push(`Time in ${ZONE_LABELS.z2} + ${ZONE_LABELS.z3} cannot exceed total time.`);
   }
 
   const validStack = safeZ2 + safeZ3 <= safeTotal;
@@ -1079,9 +1104,9 @@ function buildSummaryLines(
 ): string[] {
   const lines = [
     `Total ${formatMinutes(summary.totalMinutes)}`,
-    `Z1 ${formatMinutes(summary.z1Minutes)}`,
-    `Z2 ${formatMinutes(summary.z2Minutes)}`,
-    `Z3 ${formatMinutes(summary.z3Minutes)}`,
+    `${ZONE_LABELS.z1} ${formatMinutes(summary.z1Minutes)}`,
+    `${ZONE_LABELS.z2} ${formatMinutes(summary.z2Minutes)}`,
+    `${ZONE_LABELS.z3} ${formatMinutes(summary.z3Minutes)}`,
     `Elev ${formatElevation(summary.elevationMeters, unitSystem)}`,
   ];
 
@@ -1147,7 +1172,7 @@ function buildIntervalsEventName(
   unitSystem: UnitSystem,
 ): string {
   const summaryParts = [
-    `Z3 ${formatMinutes(parsedWorkout.z3Minutes)} / Z2 ${formatMinutes(parsedWorkout.z2Minutes)} / Z1 ${formatMinutes(parsedWorkout.z1Minutes)}`,
+    `${ZONE_LABELS.z3} ${formatMinutes(parsedWorkout.z3Minutes)} / ${ZONE_LABELS.z2} ${formatMinutes(parsedWorkout.z2Minutes)} / ${ZONE_LABELS.z1} ${formatMinutes(parsedWorkout.z1Minutes)}`,
   ];
 
   if (isEnduranceWorkoutType(workout.type) && workout.elevation.trim() !== '') {
@@ -1420,11 +1445,11 @@ function deriveWeek(week: WeekFormState, index: number, unitSystem: UnitSystem):
   }
 
   if (z3Minutes === null) {
-    errors.push('Z3 time must use the format Xh Ym.');
+    errors.push(`${ZONE_LABELS.z3} time must use the format Xh Ym.`);
   }
 
   if (z2Minutes === null) {
-    errors.push('Z2 time must use the format Xh Ym.');
+    errors.push(`${ZONE_LABELS.z2} time must use the format Xh Ym.`);
   }
 
   if (elevationValue === null) {
@@ -1443,7 +1468,7 @@ function deriveWeek(week: WeekFormState, index: number, unitSystem: UnitSystem):
   const safeLongRunPercent = longRunPercent ?? 0;
 
   if (safeZ2 + safeZ3 > safeTotal) {
-    errors.push('Z2 + Z3 cannot exceed the total time.');
+    errors.push(`${ZONE_LABELS.z2} + ${ZONE_LABELS.z3} cannot exceed the total time.`);
   }
 
   const validStack = safeZ2 + safeZ3 <= safeTotal;
@@ -1570,9 +1595,9 @@ function Chart({
         <title id="training-chart-title">Training plan analysis chart</title>
 
         <g className="chart-legend" transform={`translate(${width / 2 - 200}, 46)`}>
-          <LegendSwatch color={COLORS.z1} label="Z1" type="square" x={0} />
-          <LegendSwatch color={COLORS.z2} label="Z2" type="square" x={72} />
-          <LegendSwatch color={COLORS.z3} label="Z3" type="square" x={144} />
+          <LegendSwatch color={COLORS.z1} label={ZONE_LABELS.z1} type="square" x={0} />
+          <LegendSwatch color={COLORS.z2} label={ZONE_LABELS.z2} type="square" x={72} />
+          <LegendSwatch color={COLORS.z3} label={ZONE_LABELS.z3} type="square" x={144} />
           <LegendSwatch color={COLORS.longRun} label="Long run" type="line" x={216} />
           <LegendSwatch color={COLORS.elevation} label="Elevation" type="line" x={332} />
         </g>
@@ -1852,7 +1877,7 @@ export default function App() {
   const chartFocusAbbreviations = Array.from({ length: parsedWeekCount }, (_, weekIndex) =>
     weekDesign.focusRows
       .filter((row) => weekDesign.focusSelections[row.id][weekIndex] ?? false)
-      .map((row) => row.abbreviation.trim())
+      .map((row) => getFocusRowDisplayAbbreviation(row).trim())
       .filter(Boolean),
   );
   const invalidWeekCount = weeksInput.trim() !== '' && parsedWeekCount === 0 && weeksInput.trim() !== '0';
@@ -2922,11 +2947,11 @@ export default function App() {
                 <strong>{formatMinutes(totalVolumeMinutes)}</strong>
               </article>
               <article className="chart-summary-card">
-                <span>Time in Z3</span>
+                <span>{`Time in ${ZONE_LABELS.z3}`}</span>
                 <strong>{formatPercent(z3Share)}</strong>
               </article>
               <article className="chart-summary-card">
-                <span>Time in Z2</span>
+                <span>{`Time in ${ZONE_LABELS.z2}`}</span>
                 <strong>{formatPercent(z2Share)}</strong>
               </article>
               <article className="chart-summary-card">
@@ -3079,7 +3104,7 @@ export default function App() {
                           <p className="week-kicker">{`Wk. ${weekColumns[index]?.weeksToRace ?? index}`}</p>
                         </div>
                         <div className="week-badge-row">
-                          <span className="week-badge">Z1 {formatMinutes(parsedWeek.z1Minutes)}</span>
+                          <span className="week-badge">{ZONE_LABELS.z1} {formatMinutes(parsedWeek.z1Minutes)}</span>
                           <span className="week-badge">LR {formatMinutes(parsedWeek.longRunMinutes)}</span>
                         </div>
                       </div>
@@ -3096,7 +3121,7 @@ export default function App() {
                         </label>
 
                         <label className="field-group">
-                          <span className="field-label">Z3 Time</span>
+                          <span className="field-label">{ZONE_LABELS.z3} Time</span>
                           <input
                             className="text-input"
                             onChange={(event) => updateWeek(index, 'z3Time', event.target.value)}
@@ -3106,7 +3131,7 @@ export default function App() {
                         </label>
 
                         <label className="field-group">
-                          <span className="field-label">Z2 Time</span>
+                          <span className="field-label">{ZONE_LABELS.z2} Time</span>
                           <input
                             className="text-input"
                             onChange={(event) => updateWeek(index, 'z2Time', event.target.value)}
@@ -3436,18 +3461,18 @@ export default function App() {
                                   </button>
                                 </div>
                               ) : (
-                                row.label
+                                getFocusRowDisplayLabel(row)
                               )}
                             </th>
                             <td className="week-design-sticky-column week-design-abbr-cell">
                               <input
                                 className="week-grid-input week-grid-input-abbr"
-                                maxLength={2}
+                                maxLength={4}
                                 onChange={(event) =>
                                   updateFocusRowAbbreviation(row.id, event.target.value)
                                 }
                                 type="text"
-                                value={row.abbreviation}
+                                value={getFocusRowDisplayAbbreviation(row)}
                               />
                             </td>
                             {weekColumns.map((column, weekIndex) => (
@@ -3537,15 +3562,15 @@ export default function App() {
                                 </span>
                               </span>
                               <span className="calendar-summary-line">
-                                <span className="calendar-summary-label">Z3</span>{' '}
+                                <span className="calendar-summary-label">{ZONE_LABELS.z3}</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(prescribedWeek.z3Minutes)}
                                 </span>{' '}
-                                <span className="calendar-summary-label">Z2</span>{' '}
+                                <span className="calendar-summary-label">{ZONE_LABELS.z2}</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(prescribedWeek.z2Minutes)}
                                 </span>{' '}
-                                <span className="calendar-summary-label">Z1</span>{' '}
+                                <span className="calendar-summary-label">{ZONE_LABELS.z1}</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(prescribedWeek.z1Minutes)}
                                 </span>
@@ -3583,15 +3608,15 @@ export default function App() {
                                 </span>
                               </span>
                               <span className="calendar-summary-line">
-                                <span className="calendar-summary-label">Z3</span>{' '}
+                                <span className="calendar-summary-label">{ZONE_LABELS.z3}</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(scheduledSummary.z3Minutes)}
                                 </span>{' '}
-                                <span className="calendar-summary-label">Z2</span>{' '}
+                                <span className="calendar-summary-label">{ZONE_LABELS.z2}</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(scheduledSummary.z2Minutes)}
                                 </span>{' '}
-                                <span className="calendar-summary-label">Z1</span>{' '}
+                                <span className="calendar-summary-label">{ZONE_LABELS.z1}</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(scheduledSummary.z1Minutes)}
                                 </span>
@@ -3776,9 +3801,9 @@ export default function App() {
                 {weekDesign.focusRows.map((row) => (
                   <tr key={`export-focus-${row.id}`}>
                     <th className="week-design-label" scope="row">
-                      {row.label}
+                      {getFocusRowDisplayLabel(row)}
                     </th>
-                    <td className="week-design-abbr-cell">{row.abbreviation}</td>
+                    <td className="week-design-abbr-cell">{getFocusRowDisplayAbbreviation(row)}</td>
                     {weekColumns.map((column, weekIndex) => (
                       <td key={`export-focus-cell-${row.id}-${weekIndex + 1}`}>
                         {weekDesign.focusSelections[row.id][weekIndex] ? (
@@ -3846,8 +3871,8 @@ export default function App() {
                   each week.
                 </p>
                 <p>
-                  Total Time sets the full height of the weekly bar. Z3 and Z2 are entered directly,
-                  while Z1 is calculated automatically from whatever time remains.
+                  Total Time sets the full height of the weekly bar. Z4+ and Z3 are entered directly,
+                  while Z1-2 is calculated automatically from whatever time remains.
                 </p>
                 <p>
                   Long Run is entered as a percentage of total time, and elevation is tracked
@@ -4144,7 +4169,7 @@ export default function App() {
                 </label>
 
                 <label className="field-group">
-                  <span className="field-label">Time in Z3</span>
+                  <span className="field-label">{`Time in ${ZONE_LABELS.z3}`}</span>
                   <input
                     className="text-input"
                     onChange={(event) => updateCalendarDraft('z3Time', event.target.value)}
@@ -4154,7 +4179,7 @@ export default function App() {
                 </label>
 
                 <label className="field-group">
-                  <span className="field-label">Time in Z2</span>
+                  <span className="field-label">{`Time in ${ZONE_LABELS.z2}`}</span>
                   <input
                     className="text-input"
                     onChange={(event) => updateCalendarDraft('z2Time', event.target.value)}
