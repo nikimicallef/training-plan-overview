@@ -658,7 +658,8 @@ code {
   gap: 0.7rem;
   position: sticky;
   top: -1.2rem;
-  z-index: 2;
+  /* Keep the tabs and controls above the calendar's sticky summary columns. */
+  z-index: 4;
   margin: -1.2rem -1.2rem 0.35rem;
   padding: 1.2rem 1.2rem 0.35rem;
   background:

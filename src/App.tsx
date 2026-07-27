@@ -179,6 +179,7 @@ const DEFAULT_WEEK_COUNT = 6;
 const TIME_AXIS_INTERVAL_MINUTES = 60;
 const DEFAULT_TIME_AXIS_MAX_MINUTES = 180;
 const WORKOUT_TITLE_MAX_LENGTH = 90;
+const CALENDAR_WORKOUT_TITLE_MAX_LENGTH = 60;
 const RIGHT_AXIS_TICKS = 5;
 const FEET_PER_METER = 3.28084;
 const INTERVALS_BASE_URL = 'https://intervals.icu/api/v1/athlete/0/events';
@@ -1585,8 +1586,6 @@ function Chart({
   const plotHeight = height - margin.top - margin.bottom;
   const slotWidth = plotWidth / Math.max(data.length, 1);
   const barWidth = Math.max(8, Math.min(34, slotWidth * 0.62));
-  const labelStep =
-    data.length > 36 ? 6 : data.length > 24 ? 4 : data.length > 16 ? 2 : 1;
 
   const maxTimeValue = Math.max(...data.map((week) => Math.max(week.totalMinutes, week.longRunMinutes)), 0);
   const maxElevationValue = Math.max(...data.map((week) => week.elevationMeters), 0);
@@ -1666,8 +1665,14 @@ function Chart({
                 y1={y}
                 y2={y}
               />
-              <text className="axis-label" fill={chartExportTextColor} x={margin.left - 12} y={y + 4}>
-                {Math.round(tick)}
+              <text
+                className="axis-label"
+                fill={chartExportTextColor}
+                textAnchor="end"
+                x={margin.left - 12}
+                y={y + 4}
+              >
+                {Math.round(tick / 60)}
               </text>
             </g>
           );
@@ -1750,11 +1755,9 @@ function Chart({
                   </g>
                 </>
               ) : null}
-              {index % labelStep === 0 || index === data.length - 1 ? (
-                <text className="week-label" fill={chartExportTextColor} x={x} y={height - margin.bottom + 26}>
-                  {weekLabels[index] ?? ''}
-                </text>
-              ) : null}
+              <text className="week-label" fill={chartExportTextColor} x={x} y={height - margin.bottom + 26}>
+                {weekLabels[index] ?? ''}
+              </text>
               {(focusAbbreviations[index] ?? []).map((abbreviation, abbreviationIndex) => (
                 <text
                   className="chart-focus-label"
@@ -1811,7 +1814,7 @@ function Chart({
           fill={chartExportTextColor}
           transform={`translate(24 ${margin.top + plotHeight / 2}) rotate(-90)`}
         >
-          Time (minutes)
+          Time (hours)
         </text>
         <text
           className="axis-title"
@@ -2244,7 +2247,7 @@ export default function App() {
   function updateCalendarDraft(field: keyof DayWorkout, value: string) {
     setCalendarDraft((previous) => ({
       ...previous,
-      [field]: field === 'title' ? value.slice(0, 30) : value,
+      [field]: field === 'title' ? value.slice(0, CALENDAR_WORKOUT_TITLE_MAX_LENGTH) : value,
     }));
   }
 
@@ -3602,7 +3605,7 @@ export default function App() {
                       const weekDates = getWeekDates(column.startDate);
                       const scheduledSummary = summarizeWeekSchedule(weekDates, scheduledWorkouts, unitSystem);
                       const prescribedWeek = getPrescribedWeek(parsedWeeks, weekIndex);
-                      const focusSummary = chartFocusAbbreviations[weekIndex]?.join(' ') || '-';
+                      const focusSummary = chartFocusAbbreviations[weekIndex]?.join(', ') || '-';
 
                       return (
                         <tr key={`calendar-week-${weekIndex + 1}`}>
@@ -3619,40 +3622,43 @@ export default function App() {
                           <td className="calendar-sticky-column calendar-summary-cell calendar-prescribed-cell">
                             <div className="calendar-summary-grid">
                               <span className="calendar-summary-line">
-                                <span className="calendar-summary-label">Total</span>{' '}
+                                <span className="calendar-summary-label">Total:</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(prescribedWeek.totalMinutes)}
                                 </span>
                               </span>
                               <span className="calendar-summary-line">
-                                <span className="calendar-summary-label">{ZONE_LABELS.z3}</span>{' '}
+                                <span className="calendar-summary-label">{ZONE_LABELS.z3}:</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(prescribedWeek.z3Minutes)}
-                                </span>{' '}
-                                <span className="calendar-summary-label">{ZONE_LABELS.z2}</span>{' '}
+                                </span>
+                              </span>
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">{ZONE_LABELS.z2}:</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(prescribedWeek.z2Minutes)}
-                                </span>{' '}
-                                <span className="calendar-summary-label">{ZONE_LABELS.z1}</span>{' '}
+                                </span>
+                              </span>
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">{ZONE_LABELS.z1}:</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(prescribedWeek.z1Minutes)}
                                 </span>
                               </span>
                               <span className="calendar-summary-line">
-                                <span className="calendar-summary-label">Elev</span>{' '}
+                                <span className="calendar-summary-label">Elev:</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatElevation(prescribedWeek.elevationMeters, unitSystem)}
                                 </span>
                               </span>
                               <span className="calendar-summary-line">
-                                <span className="calendar-summary-label">Long</span>{' '}
+                                <span className="calendar-summary-label">Long:</span>{' '}
                                 <span className="calendar-summary-value">
-                                  {formatPercent(
+                                  {`${formatPercent(
                                     prescribedWeek.totalMinutes > 0
-                                      ? (prescribedWeek.longRunMinutes / prescribedWeek.totalMinutes) *
-                                          100
+                                      ? (prescribedWeek.longRunMinutes / prescribedWeek.totalMinutes) * 100
                                       : 0,
-                                  )}
+                                  )} - ${formatMinutes(prescribedWeek.longRunMinutes)}`}
                                 </span>
                               </span>
                               <span className="calendar-summary-line">
@@ -3665,33 +3671,37 @@ export default function App() {
                           <td className="calendar-sticky-column calendar-summary-cell calendar-scheduled-cell">
                             <div className="calendar-summary-grid">
                               <span className="calendar-summary-line">
-                                <span className="calendar-summary-label">Total</span>{' '}
+                                <span className="calendar-summary-label">Total:</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(scheduledSummary.totalMinutes)}
                                 </span>
                               </span>
                               <span className="calendar-summary-line">
-                                <span className="calendar-summary-label">{ZONE_LABELS.z3}</span>{' '}
+                                <span className="calendar-summary-label">{ZONE_LABELS.z3}:</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(scheduledSummary.z3Minutes)}
-                                </span>{' '}
-                                <span className="calendar-summary-label">{ZONE_LABELS.z2}</span>{' '}
+                                </span>
+                              </span>
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">{ZONE_LABELS.z2}:</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(scheduledSummary.z2Minutes)}
-                                </span>{' '}
-                                <span className="calendar-summary-label">{ZONE_LABELS.z1}</span>{' '}
+                                </span>
+                              </span>
+                              <span className="calendar-summary-line">
+                                <span className="calendar-summary-label">{ZONE_LABELS.z1}:</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatMinutes(scheduledSummary.z1Minutes)}
                                 </span>
                               </span>
                               <span className="calendar-summary-line">
-                                <span className="calendar-summary-label">Elev</span>{' '}
+                                <span className="calendar-summary-label">Elev:</span>{' '}
                                 <span className="calendar-summary-value">
                                   {formatElevation(scheduledSummary.elevationMeters, unitSystem)}
                                 </span>
                               </span>
                               <span className="calendar-summary-line">
-                                <span className="calendar-summary-label">Sessions</span>{' '}
+                                <span className="calendar-summary-label">Sessions:</span>{' '}
                                 <span className="calendar-summary-value">
                                   {scheduledSummary.workoutCount}
                                 </span>
@@ -4198,7 +4208,7 @@ export default function App() {
                 <span className="field-label">Title</span>
                 <input
                   className="text-input"
-                  maxLength={WORKOUT_TITLE_MAX_LENGTH}
+                  maxLength={CALENDAR_WORKOUT_TITLE_MAX_LENGTH}
                   onChange={(event) => updateCalendarDraft('title', event.target.value)}
                   type="text"
                   value={calendarDraft.title}
