@@ -1,0 +1,19 @@
+src/App.tsx
+  s_0fa7111c92c67a::t_35676d51432a39 3974-3975
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.2",
+  "base_commit_sha": "58c8e93fd3bb9f5758483adc0ac73923307a1f5c",
+  "prompts": {},
+  "sessions": {
+    "s_0fa7111c92c67a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa294-2a88-7342-ac80-2df94081df66",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "Niki Micallef <niki.micallef@umusic.com>"
+    }
+  }
+}
