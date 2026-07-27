@@ -909,8 +909,8 @@ code {
 }
 
 .calendar-day-cell {
-  width: 108px;
-  min-width: 108px;
+  width: 160px;
+  min-width: 160px;
 }
 
 .calendar-day-button {
@@ -1035,6 +1035,13 @@ code {
   max-width: 118px;
   padding: 0.65rem 0.7rem;
   background: rgba(33, 70, 97, 0.98);
+}
+
+.calendar-scheduled-head,
+.calendar-scheduled-cell {
+  width: 108px;
+  min-width: 108px;
+  max-width: 108px;
 }
 
 .calendar-prescribed-cell {

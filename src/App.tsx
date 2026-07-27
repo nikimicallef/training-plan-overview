@@ -1148,12 +1148,9 @@ function buildSummaryLines(
 }
 
 function buildDayWorkoutMetricLine(parsedWorkout: ParsedDayWorkout): string {
-  return [
-    formatMinutes(parsedWorkout.totalMinutes),
-    formatMinutes(parsedWorkout.z3Minutes),
-    formatMinutes(parsedWorkout.z2Minutes),
-    formatMinutes(parsedWorkout.z1Minutes),
-  ].join(' / ');
+  return `${formatMinutes(parsedWorkout.totalMinutes)} - ${formatMinutes(parsedWorkout.z3Minutes)} / ${formatMinutes(
+    parsedWorkout.z2Minutes,
+  )} / ${formatMinutes(parsedWorkout.z1Minutes)}`;
 }
 
 function buildCalendarDayCellText(date: Date, workouts: ScheduledDayWorkout[] | undefined, unitSystem: UnitSystem): string {
