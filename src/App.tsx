@@ -3008,10 +3008,6 @@ export default function App() {
           <section className="panel chart-panel" ref={chartExportRef}>
             <div className="chart-summary-strip">
               <article className="chart-summary-card">
-                <span>Total Volume</span>
-                <strong>{Math.round(totalVolumeMinutes)} min</strong>
-              </article>
-              <article className="chart-summary-card">
                 <span>Total Time</span>
                 <strong>{formatMinutes(totalVolumeMinutes)}</strong>
               </article>
@@ -3975,8 +3971,8 @@ export default function App() {
                   updates immediately.
                 </p>
                 <p>
-                  The summary strip above the chart gives you the total volume, total time, time in
-                  zone, and total elevation across the full plan.
+                  The summary strip above the chart gives you total time, time in zone, and total
+                  elevation across the full plan.
                 </p>
                 <p>
                   Use the <strong>Metric / Imperial</strong> toggle above the planner tabs whenever
