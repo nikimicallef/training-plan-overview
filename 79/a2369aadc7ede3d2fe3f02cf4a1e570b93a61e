@@ -1,0 +1,22 @@
+src/styles.css
+  s_0fa7111c92c67a::t_62bc46a5899509 912-913
+  s_0fa7111c92c67a::t_b9ca306910f48f 1040-1044
+src/App.tsx
+  s_0fa7111c92c67a::t_b9ca306910f48f 1151-1153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.2",
+  "base_commit_sha": "79a2369aadc7ede3d2fe3f02cf4a1e570b93a61e",
+  "prompts": {},
+  "sessions": {
+    "s_0fa7111c92c67a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa294-2a88-7342-ac80-2df94081df66",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "Niki Micallef <niki.micallef@umusic.com>"
+    }
+  }
+}
