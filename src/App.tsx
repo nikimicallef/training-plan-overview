@@ -191,14 +191,15 @@ const BORN_ON_THE_TRAIL_URL =
 const BORN_ON_THE_TRAIL_COACHING_URL =
   `https://bornonthetrail.substack.com/p/coaching?${BORN_ON_THE_TRAIL_REFERRAL_QUERY}`;
 const DEFAULT_FOCUS_ROWS: FocusRow[] = [
-  { id: 'recovery', label: 'Recovery', abbreviation: 'R', isCustom: false },
   { id: 'z1-focus', label: 'Z1-2', abbreviation: 'Z1-2', isCustom: false },
   { id: 'z2-focus', label: 'Z3', abbreviation: 'Z3', isCustom: false },
-  { id: 'z3-focus', label: 'Z4+', abbreviation: 'Z4+', isCustom: false },
-  { id: 'cross-training', label: 'Cross Training', abbreviation: 'XT', isCustom: false },
-  { id: 'strength', label: 'Strength', abbreviation: 'ST', isCustom: false },
+  { id: 'z3-focus', label: 'Z4', abbreviation: 'Z4', isCustom: false },
+  { id: 'recovery', label: 'Recovery', abbreviation: 'R', isCustom: false },
   { id: 'taper', label: 'Taper', abbreviation: 'TA', isCustom: false },
+  { id: 'cross-training', label: 'Cross Training', abbreviation: 'XT', isCustom: false },
   { id: 'testing', label: 'Testing', abbreviation: 'TE', isCustom: false },
+  { id: 'return-to-running', label: 'Return to Running', abbreviation: 'RTR', isCustom: false },
+  { id: 'mental-training', label: 'Mental Training', abbreviation: 'MT', isCustom: false },
 ];
 
 // Keep these keys aligned with saved plans for backwards compatibility; only their labels change.
@@ -385,7 +386,6 @@ function getDefaultFocusAbbreviation(id: string, label: string): string {
 function getFocusRowDisplayLabel(row: FocusRow): string {
   if (!row.isCustom && row.id === 'z1-focus') return ZONE_LABELS.z1;
   if (!row.isCustom && row.id === 'z2-focus') return ZONE_LABELS.z2;
-  if (!row.isCustom && row.id === 'z3-focus') return ZONE_LABELS.z3;
   return row.label;
 }
 
@@ -585,13 +585,27 @@ function formatDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function formatCalendarDate(date: Date): string {
-  return date.toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
+function formatDisplayDate(date: Date): string {
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
     year: 'numeric',
   });
+}
+
+function formatDateValue(value: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return '';
+  }
+
+  const date = new Date(`${trimmed}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? trimmed : formatDisplayDate(date);
+}
+
+function formatCalendarDate(date: Date): string {
+  return formatDisplayDate(date);
 }
 
 function formatDateRange(startDate: Date, endDate: Date): string {
@@ -987,10 +1001,7 @@ function formatWeekStart(date: Date | null): string {
     return 'Set race date';
   }
 
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
+  return formatDisplayDate(date);
 }
 
 function getWeekDates(startDate: Date | null): Date[] {
@@ -3146,7 +3157,7 @@ export default function App() {
                   </div>
                   <div className="planner-chip">
                     <span>Race date</span>
-                    <strong>{weekDesign.raceDate || 'Set in Week Focus'}</strong>
+                    <strong>{formatDateValue(weekDesign.raceDate) || 'Set in Week Focus'}</strong>
                   </div>
                 </div>
               </>
